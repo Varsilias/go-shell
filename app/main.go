@@ -17,8 +17,8 @@ func main() {
 			os.Exit(1)
 		}
 		cmdArgs := strings.Split(input, " ")
-		command := strings.Trim(cmdArgs[0], " ")
-		args := strings.Join(cmdArgs[1:], " ") // echo one two
+		command := strings.TrimSpace(cmdArgs[0])
+		args := strings.TrimSpace(strings.Join(cmdArgs[1:], " ")) // echo one two
 		if command == "exit" {
 			break
 		}
