@@ -37,7 +37,7 @@ func main() {
 
 func handleTypeCommand(command string) {
 	if !slices.Contains(builtins, command) {
-		fmt.Println(command + ": command not found")
+		fmt.Println(command + ": not found")
 	} else {
 		fmt.Println(command + " is a shell builtin")
 	}
