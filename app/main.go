@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 )
 
 var builtins = []string{"echo", "exit", "type", "pwd", "cd"}
@@ -32,6 +33,24 @@ func main() {
 		command := cmdArgs[0]
 		args := cmdArgs[1:]
 
+		// handle redirection token
+		var outputFile *os.File
+		for i, arg := range args {
+			if (arg == ">" || arg == "1>") && i+1 < len(args) {
+				if outputFile, err = os.Create(args[i+1]); err != nil {
+					fmt.Fprintf(os.Stderr, "Error creating file: %v\n", err)
+					continue
+				}
+				args = args[:i]
+				break
+			}
+		}
+
+		if outputFile != nil {
+			defer outputFile.Close()
+			os.Stdout = outputFile
+		}
+
 		if command == "exit" {
 			break
 		}
@@ -46,6 +65,10 @@ func main() {
 			handleCd(args)
 		default:
 			handleCustomCommand(cmdArgs)
+		}
+
+		if outputFile != nil {
+			os.Stdout = os.NewFile(uintptr(syscall.Stdout), "/dev/stdout")
 		}
 	}
 }
