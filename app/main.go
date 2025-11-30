@@ -30,20 +30,20 @@ func main() {
 			continue
 		}
 		command := cmdArgs[0]
+		args := cmdArgs[1:]
 
-		args := strings.Join(cmdArgs[1:], " ") // echo one two
 		if command == "exit" {
 			break
 		}
 		switch command {
 		case "echo":
-			fmt.Fprintln(os.Stdout, args)
+			handleEcho(args)
 		case "type":
 			handleTypeCommand(cmdArgs[1])
 		case "pwd":
 			handlePwd()
 		case "cd":
-			handleCd(cmdArgs[1:])
+			handleCd(args)
 		default:
 			handleCustomCommand(cmdArgs)
 		}
@@ -73,6 +73,32 @@ func handleCustomCommand(args []string) int {
 	}
 
 	return 0
+}
+
+func handleEcho(args []string) {
+	var result []string
+	s := strings.Join(args, " ")
+	var current string
+	inQuote := false
+	for i := 0; i < len(s); i++ {
+		el := s[i]
+		fmt.Printf("I: %d, el: %s\n", i, string(el))
+		if el == '\'' {
+			inQuote = !inQuote
+		} else if el == ' ' && !inQuote {
+			if current != "" {
+				result = append(result, current)
+				current = ""
+			}
+		} else {
+			current += string(el)
+		}
+	}
+	// add last element to result slice provided it is not empty
+	if current != "" {
+		result = append(result, current)
+	}
+	fmt.Fprintln(os.Stdout, strings.Join(result, " ")+"\n")
 }
 
 func handlePwd() {
