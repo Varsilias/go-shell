@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-var builtins = []string{"echo", "exit", "type"}
+var builtins = []string{"echo", "exit", "type", "pwd"}
 var StopWalk = errors.New("command found, stopping walk")
 
 func main() {
@@ -40,6 +40,8 @@ func main() {
 			fmt.Fprintln(os.Stdout, args)
 		case "type":
 			handleTypeCommand(cmdArgs[1])
+		case "pwd":
+			handlePwd()
 		default:
 			handleCustomCommand(cmdArgs)
 		}
@@ -69,6 +71,15 @@ func handleCustomCommand(args []string) int {
 	}
 
 	return 0
+}
+
+func handlePwd() {
+	path, err := filepath.Abs(".")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "could not print working directory: %s", err)
+		os.Exit(1)
+	}
+	fmt.Println(path)
 }
 
 func handleTypeCommand(command string) {
