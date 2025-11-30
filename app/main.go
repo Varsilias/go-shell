@@ -97,7 +97,7 @@ func handleEcho(args []string) {
 	if current != "" {
 		result = append(result, current)
 	}
-	fmt.Fprintln(os.Stdout, strings.Join(result, " ")+"\n")
+	fmt.Fprintln(os.Stdout, strings.Join(result, " "))
 }
 
 func handlePwd() {
