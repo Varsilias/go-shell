@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -22,9 +23,15 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error reading input: %s\n", err)
 			os.Exit(1)
 		}
-		cmdArgs := strings.Split(input, " ")
-		command := strings.TrimSpace(cmdArgs[0])
-		args := strings.TrimSpace(strings.Join(cmdArgs[1:], " ")) // echo one two
+		cmdArgs := strings.Split(strings.TrimSpace(input), " ")
+
+		// Handle empty input (just hitting Enter)
+		if len(cmdArgs) == 0 || cmdArgs[0] == "" {
+			continue
+		}
+		command := cmdArgs[0]
+
+		args := strings.Join(cmdArgs[1:], " ") // echo one two
 		if command == "exit" {
 			break
 		}
@@ -32,11 +39,36 @@ func main() {
 		case "echo":
 			fmt.Fprintln(os.Stdout, args)
 		case "type":
-			handleTypeCommand(strings.TrimSpace(cmdArgs[1]))
+			handleTypeCommand(cmdArgs[1])
 		default:
-			fmt.Println(command + ": command not found")
+			handleCustomCommand(cmdArgs)
 		}
 	}
+}
+
+func handleCustomCommand(args []string) int {
+	command := strings.TrimSpace(args[0])
+	cmdPath := findExecutableInPath(command)
+	if cmdPath == "" {
+		fmt.Fprintf(os.Stdout, "%s: command not found\n", command)
+		return 127
+	}
+
+	cmd := exec.Command(cmdPath, args[1:]...)
+	cmd.Args = args
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			return exitError.ExitCode()
+		}
+		return 1
+	}
+
+	return 0
 }
 
 func handleTypeCommand(command string) {
