@@ -82,7 +82,6 @@ func handleEcho(args []string) {
 	inQuote := false
 	for i := 0; i < len(s); i++ {
 		el := s[i]
-		fmt.Printf("I: %d, el: %s\n", i, string(el))
 		if el == '\'' {
 			inQuote = !inQuote
 		} else if el == ' ' && !inQuote {
