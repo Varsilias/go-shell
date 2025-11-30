@@ -86,8 +86,15 @@ func handlePwd() {
 
 func handleCd(args []string) {
 	dir := strings.Join(args, "")
+	// path is not an absolute directory so it needs to be resolved
+	// by getting the absolute path
 	if !filepath.IsAbs(dir) {
-		fmt.Fprintf(os.Stderr, "cd: %s: No such file or directory\n", dir)
+		path, err := filepath.Abs(dir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cd: %s: No such file or directory\n", dir)
+			return
+		}
+		os.Chdir(path)
 		return
 	}
 
