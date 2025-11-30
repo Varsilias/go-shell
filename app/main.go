@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 )
 
 var builtins = []string{"echo", "exit", "type", "pwd", "cd"}
@@ -25,6 +24,7 @@ func main() {
 			os.Exit(1)
 		}
 		cmdArgs := strings.Split(strings.TrimSpace(input), " ")
+		fmt.Println("cmdArgs:", cmdArgs)
 
 		// Handle empty input (just hitting Enter)
 		if len(cmdArgs) == 0 || cmdArgs[0] == "" {
@@ -34,22 +34,35 @@ func main() {
 		args := cmdArgs[1:]
 
 		// handle redirection token
-		var outputFile *os.File
-		for i, arg := range args {
-			if (arg == ">" || arg == "1>") && i+1 < len(args) {
-				if outputFile, err = os.Create(args[i+1]); err != nil {
-					fmt.Fprintf(os.Stderr, "Error creating file: %v\n", err)
-					continue
-				}
-				args = args[:i]
-				break
-			}
-		}
+		// var outputFile *os.File
+		// for i, arg := range args {
+		// 	if (arg == ">" || arg == "1>") && i+1 < len(args) {
+		// 		filePath := args[i+1]
+		// 		filePath = strings.Trim(filePath, ` "'`)
+		// 		fmt.Println("FilePath:", filePath)
 
-		if outputFile != nil {
-			defer outputFile.Close()
-			os.Stdout = outputFile
-		}
+		// 		dir := filepath.Dir(filePath)
+
+		// 		if dir != "." {
+		// 			err := os.MkdirAll(dir, os.ModePerm)
+		// 			if err != nil {
+		// 				log.Fatalf("error creating parent directories: %s\n", err)
+		// 			}
+		// 		}
+
+		// 		if outputFile, err = os.Create(filePath); err != nil {
+		// 			fmt.Fprintf(os.Stderr, "Error creating file: %v\n", err)
+		// 			continue
+		// 		}
+		// 		args = args[:i]
+		// 		break
+		// 	}
+		// }
+
+		// if outputFile != nil {
+		// 	defer outputFile.Close()
+		// 	os.Stdout = outputFile
+		// }
 
 		if command == "exit" {
 			break
@@ -64,25 +77,28 @@ func main() {
 		case "cd":
 			handleCd(args)
 		default:
-			handleCustomCommand(cmdArgs)
+			handleCustomCommand(command, args)
 		}
 
-		if outputFile != nil {
-			os.Stdout = os.NewFile(uintptr(syscall.Stdout), "/dev/stdout")
-		}
+		// if outputFile != nil {
+		// 	os.Stdout = os.NewFile(uintptr(syscall.Stdout), "/dev/stdout")
+		// }
 	}
 }
 
-func handleCustomCommand(args []string) int {
-	command := strings.TrimSpace(args[0])
+func handleCustomCommand(command string, args []string) int {
 	cmdPath := findExecutableInPath(command)
 	if cmdPath == "" {
 		fmt.Fprintf(os.Stdout, "%s: command not found\n", command)
 		return 127
 	}
 
-	cmd := exec.Command(cmdPath, args[1:]...)
-	cmd.Args = args
+	args = splitAndHandleArgsQuotes(args)
+	fmt.Println("cmdPath", cmdPath)
+	fmt.Println("args", args)
+
+	cmd := exec.Command(cmdPath, args...)
+	cmd.Args = append([]string{command}, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -99,27 +115,7 @@ func handleCustomCommand(args []string) int {
 }
 
 func handleEcho(args []string) {
-	var result []string
-	s := strings.Join(args, " ")
-	var current string
-	inQuote := false
-	for i := 0; i < len(s); i++ {
-		el := s[i]
-		if el == '\'' {
-			inQuote = !inQuote
-		} else if el == ' ' && !inQuote {
-			if current != "" {
-				result = append(result, current)
-				current = ""
-			}
-		} else {
-			current += string(el)
-		}
-	}
-	// add last element to result slice provided it is not empty
-	if current != "" {
-		result = append(result, current)
-	}
+	result := splitAndHandleArgsQuotes(args)
 	fmt.Fprintln(os.Stdout, strings.Join(result, " "))
 }
 
@@ -212,4 +208,30 @@ PATH_LOOP:
 		}
 	}
 	return cmdPath
+}
+
+func splitAndHandleArgsQuotes(args []string) []string {
+	var result []string
+	s := strings.Join(args, " ")
+	var current string
+	inQuote := false
+	for i := 0; i < len(s); i++ {
+		el := s[i]
+		if el == '\'' {
+			inQuote = !inQuote
+		} else if el == ' ' && !inQuote {
+			if current != "" {
+				result = append(result, current)
+				current = ""
+			}
+		} else {
+			current += string(el)
+		}
+	}
+	// add last element to result slice provided it is not empty
+	if current != "" {
+		result = append(result, current)
+	}
+
+	return result
 }
