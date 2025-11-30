@@ -24,7 +24,6 @@ func main() {
 			os.Exit(1)
 		}
 		cmdArgs := strings.Split(strings.TrimSpace(input), " ")
-		fmt.Println("cmdArgs:", cmdArgs)
 
 		// Handle empty input (just hitting Enter)
 		if len(cmdArgs) == 0 || cmdArgs[0] == "" {
@@ -94,8 +93,6 @@ func handleCustomCommand(command string, args []string) int {
 	}
 
 	args = splitAndHandleArgsQuotes(args)
-	fmt.Println("cmdPath", cmdPath)
-	fmt.Println("args", args)
 
 	cmd := exec.Command(cmdPath, args...)
 	cmd.Args = append([]string{command}, args...)
