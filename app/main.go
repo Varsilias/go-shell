@@ -86,6 +86,15 @@ func handlePwd() {
 
 func handleCd(args []string) {
 	dir := strings.Join(args, "")
+	// handle home directory navigation
+	if dir == "~" {
+		homeDir := os.Getenv("HOME")
+		err := os.Chdir(homeDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cd: %s: No such file or directory\n", dir)
+		}
+		return
+	}
 	// path is not an absolute directory so it needs to be resolved
 	// by getting the absolute path
 	if !filepath.IsAbs(dir) {
@@ -94,10 +103,14 @@ func handleCd(args []string) {
 			fmt.Fprintf(os.Stderr, "cd: %s: No such file or directory\n", dir)
 			return
 		}
-		os.Chdir(path)
+		err = os.Chdir(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cd: %s: No such file or directory\n", dir)
+		}
 		return
 	}
 
+	// assume absolute path
 	err := os.Chdir(dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cd: %s: No such file or directory\n", dir)
