@@ -211,12 +211,21 @@ func splitAndHandleArgsQuotes(args []string) []string {
 	var result []string
 	s := strings.Join(args, " ")
 	var current string
-	inQuote := false
+	inQuotes := false
+	quoteChar := rune(0)
+
 	for i := 0; i < len(s); i++ {
 		el := s[i]
-		if el == '\'' {
-			inQuote = !inQuote
-		} else if el == ' ' && !inQuote {
+		if el == '\'' || el == '"' {
+			if inQuotes && el == byte(quoteChar) {
+				inQuotes = false
+			} else if !inQuotes {
+				inQuotes = true
+				quoteChar = rune(el)
+			} else {
+				current += string(el)
+			}
+		} else if el == ' ' && !inQuotes {
 			if current != "" {
 				result = append(result, current)
 				current = ""
