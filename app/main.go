@@ -207,25 +207,119 @@ PATH_LOOP:
 	return cmdPath
 }
 
+// func splitAndHandleArgsQuotes(args []string) []string {
+// 	var result []string
+// 	s := strings.Join(args, " ")
+// 	var current string
+// 	inQuotes := false
+// 	quoteChar := rune(0)
+
+// 	for i := 0; i < len(s); i++ {
+// 		el := s[i]
+// 		if el == '\'' || el == '"' {
+// 			if inQuotes && el == byte(quoteChar) {
+// 				inQuotes = false
+// 			} else if !inQuotes {
+// 				inQuotes = true
+// 				quoteChar = rune(el)
+// 			} else {
+// 				current += string(el)
+// 			}
+// 		} else if el == ' ' && !inQuotes {
+// 			if current != "" {
+// 				result = append(result, current)
+// 				current = ""
+// 			}
+// 		} else {
+// 			current += string(el)
+// 		}
+// 	}
+// 	// add last element to result slice provided it is not empty
+// 	if current != "" {
+// 		result = append(result, current)
+// 	}
+
+// 	return result
+// }
+
 func splitAndHandleArgsQuotes(args []string) []string {
 	var result []string
 	s := strings.Join(args, " ")
 	var current string
 	inQuotes := false
 	quoteChar := rune(0)
+	escaped := false
 
 	for i := 0; i < len(s); i++ {
 		el := s[i]
+
+		// Handle escape sequences
+		if escaped {
+			// Process the escaped character
+			switch el {
+			case 'n':
+				current += "\n"
+			case 't':
+				current += "\t"
+			case 'r':
+				current += "\r"
+			case 'b':
+				current += "\b"
+			case 'f':
+				current += "\f"
+			case 'v':
+				current += "\v"
+			case '\\':
+				current += "\\"
+			case '\'':
+				current += "'"
+			case '"':
+				current += "\""
+			case ' ':
+				current += " "
+			case '$':
+				current += "$"
+			default:
+				// For unrecognized escape sequences, keep the backslash and character
+				// This matches common shell behavior
+				current += "\\" + string(el)
+			}
+			escaped = false
+			continue
+		}
+
+		// Check for backslash (escape character)
+		if el == '\\' {
+			// In single quotes, backslashes are literal (except for \' in some shells)
+			// In double quotes or unquoted, backslashes escape the next character
+			if quoteChar == '\'' {
+				// In single quotes, backslash only escapes another single quote or backslash
+				if i+1 < len(s) && (s[i+1] == '\'' || s[i+1] == '\\') {
+					escaped = true
+					continue
+				}
+				current += string(el)
+			} else {
+				// In double quotes or unquoted context, backslash escapes next char
+				escaped = true
+			}
+			continue
+		}
+
+		// Handle quote characters
 		if el == '\'' || el == '"' {
 			if inQuotes && el == byte(quoteChar) {
 				inQuotes = false
+				quoteChar = rune(0)
 			} else if !inQuotes {
 				inQuotes = true
 				quoteChar = rune(el)
 			} else {
+				// Different quote type while already in quotes
 				current += string(el)
 			}
 		} else if el == ' ' && !inQuotes {
+			// Space outside quotes separates arguments
 			if current != "" {
 				result = append(result, current)
 				current = ""
@@ -234,7 +328,13 @@ func splitAndHandleArgsQuotes(args []string) []string {
 			current += string(el)
 		}
 	}
-	// add last element to result slice provided it is not empty
+
+	// Handle case where input ends with a backslash
+	if escaped {
+		current += "\\"
+	}
+
+	// Add last element to result slice provided it is not empty
 	if current != "" {
 		result = append(result, current)
 	}
