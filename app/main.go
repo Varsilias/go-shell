@@ -245,7 +245,7 @@ PATH_LOOP:
 func splitAndHandleArgsQuotes(args []string) []string {
 	var result []string
 	s := strings.Join(args, " ")
-	var current string
+	var current strings.Builder
 	inQuotes := false
 	quoteChar := rune(0)
 	escaped := false
@@ -255,35 +255,9 @@ func splitAndHandleArgsQuotes(args []string) []string {
 
 		// Handle escape sequences
 		if escaped {
-			// Process the escaped character
-			switch el {
-			case 'n':
-				current += "n"
-			case 't':
-				current += "\t"
-			case 'r':
-				current += "\r"
-			case 'b':
-				current += "\b"
-			case 'f':
-				current += "\f"
-			case 'v':
-				current += "\v"
-			case '\\':
-				current += "\\"
-			case '\'':
-				current += "'"
-			case '"':
-				current += "\""
-			case ' ':
-				current += " "
-			case '$':
-				current += "$"
-			default:
-				// For unrecognized escape sequences, keep the backslash and character
-				// This matches common shell behavior
-				current += "\\" + string(el)
-			}
+			// Backslash simply removes special meaning and makes next char literal
+			// The backslash itself is consumed/removed
+			current.WriteByte(el)
 			escaped = false
 			continue
 		}
@@ -298,7 +272,7 @@ func splitAndHandleArgsQuotes(args []string) []string {
 					escaped = true
 					continue
 				}
-				current += string(el)
+				current.WriteByte(el)
 			} else {
 				// In double quotes or unquoted context, backslash escapes next char
 				escaped = true
@@ -316,27 +290,27 @@ func splitAndHandleArgsQuotes(args []string) []string {
 				quoteChar = rune(el)
 			} else {
 				// Different quote type while already in quotes
-				current += string(el)
+				current.WriteByte(el)
 			}
 		} else if el == ' ' && !inQuotes {
 			// Space outside quotes separates arguments
-			if current != "" {
-				result = append(result, current)
-				current = ""
+			if current.Len() > 0 {
+				result = append(result, current.String())
+				current.Reset()
 			}
 		} else {
-			current += string(el)
+			current.WriteByte(el)
 		}
 	}
 
 	// Handle case where input ends with a backslash
 	if escaped {
-		current += "\\"
+		current.WriteByte('\\')
 	}
 
 	// Add last element to result slice provided it is not empty
-	if current != "" {
-		result = append(result, current)
+	if current.Len() > 0 {
+		result = append(result, current.String())
 	}
 
 	return result
