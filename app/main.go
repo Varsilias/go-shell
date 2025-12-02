@@ -258,7 +258,7 @@ func splitAndHandleArgsQuotes(args []string) []string {
 			// Process the escaped character
 			switch el {
 			case 'n':
-				current += "\n"
+				current += "n"
 			case 't':
 				current += "\t"
 			case 'r':
