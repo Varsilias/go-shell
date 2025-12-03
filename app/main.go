@@ -209,168 +209,122 @@ PATH_LOOP:
 }
 
 // func splitAndHandleArgsQuotes(args []string) []string {
-// 	var result []string
-// 	s := strings.Join(args, " ")
-// 	var current string
-// 	inQuotes := false
-// 	quoteChar := rune(0)
 
-// 	for i := 0; i < len(s); i++ {
-// 		el := s[i]
-// 		if el == '\'' || el == '"' {
-// 			if inQuotes && el == byte(quoteChar) {
-// 				inQuotes = false
-// 			} else if !inQuotes {
-// 				inQuotes = true
-// 				quoteChar = rune(el)
+// 	argumentString := strings.Join(args, " ")
+// 	arguments := make([]string, 0)
+// 	chars := make([]rune, 0)
+// 	squote := false
+// 	dquote := false
+// 	escape := false
+
+// 	for _, r := range argumentString {
+
+// 		// the character right after the escape char need to be added
+// 		if escape {
+// 			escape = false // since the escape character isn't a pair we need to make it false explicitly
+// 			chars = append(chars, r)
+// 			continue
+// 		}
+
+// 		switch r {
+// 		case '\n':
+// 		case ' ':
+// 			if squote || dquote {
+// 				chars = append(chars, r)
 // 			} else {
-// 				current += string(el)
+// 				if len(chars) > 0 {
+// 					arguments = append(arguments, string(chars))
+// 					chars = chars[:0]
+// 				}
 // 			}
-// 		} else if el == ' ' && !inQuotes {
-// 			if current != "" {
-// 				result = append(result, current)
-// 				current = ""
+// 		case '\'':
+// 			if !dquote {
+// 				squote = !squote
+// 			} else {
+// 				chars = append(chars, r)
 // 			}
-// 		} else {
-// 			current += string(el)
+// 		case '"':
+// 			if !squote {
+// 				dquote = !dquote
+// 			} else {
+// 				chars = append(chars, r)
+// 			}
+// 		case '\\':
+// 			if !(squote || dquote) {
+// 				escape = true
+// 			} else {
+// 				chars = append(chars, r)
+// 			}
+// 		default:
+// 			chars = append(chars, r)
 // 		}
 // 	}
-// 	// add last element to result slice provided it is not empty
-// 	if current != "" {
-// 		result = append(result, current)
-// 	}
 
-// 	return result
+// 	if len(chars) > 0 {
+// 		arguments = append(arguments, string(chars))
+
+// 	}
+// 	return arguments
 // }
 
-// func splitAndHandleArgsQuotes(args []string) []string {
-// 	var result []string
-// 	s := strings.Join(args, " ")
-// 	var current strings.Builder
-// 	inQuotes := false
-// 	quoteChar := rune(0)
-// 	escaped := false
-
-// 	for i := 0; i < len(s); i++ {
-// 		el := s[i]
-
-// 		// Handle escape sequences
-// 		if escaped {
-// 			// Backslash simply removes special meaning and makes next char literal
-// 			// The backslash itself is consumed/removed
-// 			current.WriteByte(el)
-// 			escaped = false
-// 			continue
-// 		}
-
-// 		// Check for backslash (escape character)
-// 		if el == '\\' {
-// 			// In single quotes, backslashes are literal (except for \' in some shells)
-// 			// In double quotes or unquoted, backslashes escape the next character
-// 			if quoteChar == '\'' {
-// 				// In single quotes, backslash only escapes another single quote or backslash
-// 				if i+1 < len(s) && (s[i+1] == '\'' || s[i+1] == '\\') {
-// 					escaped = true
-// 					continue
-// 				}
-// 				current.WriteByte(el)
-// 			} else {
-// 				// In double quotes or unquoted context, backslash escapes next char
-// 				escaped = true
-// 			}
-// 			continue
-// 		}
-
-// 		// Handle quote characters
-// 		if el == '\'' || el == '"' {
-// 			if inQuotes && el == byte(quoteChar) {
-// 				inQuotes = false
-// 				quoteChar = rune(0)
-// 			} else if !inQuotes {
-// 				inQuotes = true
-// 				quoteChar = rune(el)
-// 			} else {
-// 				// Different quote type while already in quotes
-// 				current.WriteByte(el)
-// 			}
-// 		} else if el == ' ' && !inQuotes {
-// 			// Space outside quotes separates arguments
-// 			if current.Len() > 0 {
-// 				result = append(result, current.String())
-// 				current.Reset()
-// 			}
-// 		} else {
-// 			current.WriteByte(el)
-// 		}
-// 	}
-
-// 	// Handle case where input ends with a backslash
-// 	if escaped {
-// 		current.WriteByte('\\')
-// 	}
-
-// 	// Add last element to result slice provided it is not empty
-// 	if current.Len() > 0 {
-// 		result = append(result, current.String())
-// 	}
-
-//		return result
-//	}
 func splitAndHandleArgsQuotes(args []string) []string {
+	input := strings.Join(args, " ")
+	result := make([]string, 0)
+	var builder strings.Builder
+	inSingleQuote := false
+	inDoubleQuote := false
 
-	argumentString := strings.Join(args, " ")
-	arguments := make([]string, 0)
-	chars := make([]rune, 0)
-	squote := false
-	dquote := false
-	escape := false
-
-	for _, r := range argumentString {
-
-		// the character right after the escape char need to be added
-		if escape {
-			escape = false // since the escape character isn't a pair we need to make it false explicitly
-			chars = append(chars, r)
-			continue
-		}
-
-		switch r {
-		case '\n':
-		case ' ':
-			if squote || dquote {
-				chars = append(chars, r)
+	for i := 0; i < len(input); i++ {
+		r := input[i]
+		switch {
+		case r == '\'':
+			if inDoubleQuote {
+				builder.WriteByte(r)
 			} else {
-				if len(chars) > 0 {
-					arguments = append(arguments, string(chars))
-					chars = chars[:0]
+				inSingleQuote = !inSingleQuote
+			}
+		case r == '"':
+			if inSingleQuote {
+				builder.WriteByte(r)
+			} else {
+				inDoubleQuote = !inDoubleQuote
+			}
+		case r == ' ':
+			if inSingleQuote || inDoubleQuote {
+				builder.WriteByte(r)
+			} else {
+				if builder.Len() > 0 {
+					result = append(result, builder.String())
+					builder.Reset()
 				}
 			}
-		case '\'':
-			if !dquote {
-				squote = !squote
-			} else {
-				chars = append(chars, r)
+		case r == '\\':
+			if i+1 < len(input) && !inDoubleQuote && !inSingleQuote {
+				builder.WriteByte(input[i+1])
+				i++
+				continue
 			}
-		case '"':
-			if !squote {
-				dquote = !dquote
-			} else {
-				chars = append(chars, r)
+			if i+1 < len(input) && inDoubleQuote {
+				next := input[i+1]
+				switch next {
+				case '\\', '"':
+					builder.WriteByte(next)
+					i++
+				default:
+					builder.WriteByte(r)
+				}
+				continue
 			}
-		case '\\':
-			if !(squote || dquote) {
-				escape = true
-			} else {
-				chars = append(chars, r)
-			}
+
+			builder.WriteByte(r)
 		default:
-			chars = append(chars, r)
+			builder.WriteByte(r)
 		}
 	}
 
-	if len(chars) > 0 {
-		arguments = append(arguments, string(chars))
-
+	if builder.Len() > 0 {
+		result = append(result, builder.String())
 	}
-	return arguments
+
+	return result
 }
