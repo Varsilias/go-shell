@@ -93,6 +93,7 @@ func handleCustomCommand(command string, args []string) int {
 	}
 
 	args = splitAndHandleArgsQuotes(args)
+	// fmt.Println("CArgs:", args)
 
 	cmd := exec.Command(cmdPath, args...)
 	cmd.Args = append([]string{command}, args...)
@@ -242,76 +243,134 @@ PATH_LOOP:
 // 	return result
 // }
 
+// func splitAndHandleArgsQuotes(args []string) []string {
+// 	var result []string
+// 	s := strings.Join(args, " ")
+// 	var current strings.Builder
+// 	inQuotes := false
+// 	quoteChar := rune(0)
+// 	escaped := false
+
+// 	for i := 0; i < len(s); i++ {
+// 		el := s[i]
+
+// 		// Handle escape sequences
+// 		if escaped {
+// 			// Backslash simply removes special meaning and makes next char literal
+// 			// The backslash itself is consumed/removed
+// 			current.WriteByte(el)
+// 			escaped = false
+// 			continue
+// 		}
+
+// 		// Check for backslash (escape character)
+// 		if el == '\\' {
+// 			// In single quotes, backslashes are literal (except for \' in some shells)
+// 			// In double quotes or unquoted, backslashes escape the next character
+// 			if quoteChar == '\'' {
+// 				// In single quotes, backslash only escapes another single quote or backslash
+// 				if i+1 < len(s) && (s[i+1] == '\'' || s[i+1] == '\\') {
+// 					escaped = true
+// 					continue
+// 				}
+// 				current.WriteByte(el)
+// 			} else {
+// 				// In double quotes or unquoted context, backslash escapes next char
+// 				escaped = true
+// 			}
+// 			continue
+// 		}
+
+// 		// Handle quote characters
+// 		if el == '\'' || el == '"' {
+// 			if inQuotes && el == byte(quoteChar) {
+// 				inQuotes = false
+// 				quoteChar = rune(0)
+// 			} else if !inQuotes {
+// 				inQuotes = true
+// 				quoteChar = rune(el)
+// 			} else {
+// 				// Different quote type while already in quotes
+// 				current.WriteByte(el)
+// 			}
+// 		} else if el == ' ' && !inQuotes {
+// 			// Space outside quotes separates arguments
+// 			if current.Len() > 0 {
+// 				result = append(result, current.String())
+// 				current.Reset()
+// 			}
+// 		} else {
+// 			current.WriteByte(el)
+// 		}
+// 	}
+
+// 	// Handle case where input ends with a backslash
+// 	if escaped {
+// 		current.WriteByte('\\')
+// 	}
+
+// 	// Add last element to result slice provided it is not empty
+// 	if current.Len() > 0 {
+// 		result = append(result, current.String())
+// 	}
+
+//		return result
+//	}
 func splitAndHandleArgsQuotes(args []string) []string {
-	var result []string
-	s := strings.Join(args, " ")
-	var current strings.Builder
-	inQuotes := false
-	quoteChar := rune(0)
-	escaped := false
 
-	for i := 0; i < len(s); i++ {
-		el := s[i]
+	argumentString := strings.Join(args, " ")
+	arguments := make([]string, 0)
+	chars := make([]rune, 0)
+	squote := false
+	dquote := false
+	escape := false
 
-		// Handle escape sequences
-		if escaped {
-			// Backslash simply removes special meaning and makes next char literal
-			// The backslash itself is consumed/removed
-			current.WriteByte(el)
-			escaped = false
+	for _, r := range argumentString {
+
+		// the character right after the escape char need to be added
+		if escape {
+			escape = false // since the escape character isn't a pair we need to make it false explicitly
+			chars = append(chars, r)
 			continue
 		}
 
-		// Check for backslash (escape character)
-		if el == '\\' {
-			// In single quotes, backslashes are literal (except for \' in some shells)
-			// In double quotes or unquoted, backslashes escape the next character
-			if quoteChar == '\'' {
-				// In single quotes, backslash only escapes another single quote or backslash
-				if i+1 < len(s) && (s[i+1] == '\'' || s[i+1] == '\\') {
-					escaped = true
-					continue
+		switch r {
+		case '\n':
+		case ' ':
+			if squote || dquote {
+				chars = append(chars, r)
+			} else {
+				if len(chars) > 0 {
+					arguments = append(arguments, string(chars))
+					chars = chars[:0]
 				}
-				current.WriteByte(el)
+			}
+		case '\'':
+			if !dquote {
+				squote = !squote
 			} else {
-				// In double quotes or unquoted context, backslash escapes next char
-				escaped = true
+				chars = append(chars, r)
 			}
-			continue
-		}
-
-		// Handle quote characters
-		if el == '\'' || el == '"' {
-			if inQuotes && el == byte(quoteChar) {
-				inQuotes = false
-				quoteChar = rune(0)
-			} else if !inQuotes {
-				inQuotes = true
-				quoteChar = rune(el)
+		case '"':
+			if !squote {
+				dquote = !dquote
 			} else {
-				// Different quote type while already in quotes
-				current.WriteByte(el)
+				chars = append(chars, r)
 			}
-		} else if el == ' ' && !inQuotes {
-			// Space outside quotes separates arguments
-			if current.Len() > 0 {
-				result = append(result, current.String())
-				current.Reset()
+		case '\\':
+			if !(squote || dquote) {
+				escape = true
+			} else {
+				chars = append(chars, r)
 			}
-		} else {
-			current.WriteByte(el)
+		default:
+			chars = append(chars, r)
 		}
 	}
 
-	// Handle case where input ends with a backslash
-	if escaped {
-		current.WriteByte('\\')
-	}
+	if len(chars) > 0 {
+		arguments = append(arguments, string(chars))
 
-	// Add last element to result slice provided it is not empty
-	if current.Len() > 0 {
-		result = append(result, current.String())
 	}
-
-	return result
+	return arguments
 }
