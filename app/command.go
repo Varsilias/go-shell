@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"unicode"
 )
 
 var builtins = map[string]bool{
@@ -21,6 +22,7 @@ var StopWalk = errors.New("command found, stopping walk")
 
 type Command struct {
 	inputPrompt string
+	tokens      []string
 }
 
 func NewCommand(prompt string) *Command {
@@ -157,8 +159,10 @@ func (c *Command) findExecutable(cmd string) string {
 
 func (c *Command) parseInputPrompt() (string, []string) {
 	c.normalizeQuotes()
-	fragments := strings.Split(c.inputPrompt, " ")
-	return fragments[0], fragments[1:]
+	if len(c.tokens) == 0 {
+		return "", nil
+	}
+	return c.tokens[0], c.tokens[1:]
 }
 
 // normalizeQuotes
@@ -171,48 +175,36 @@ func (c *Command) normalizeQuotes() {
 	// flags to know where we are and what we to consider
 	isSingleQuote := false
 	isDoubleQuote := false
-
-	// "s" is a RUNE
-	for i, s := range prompt {
+	isSlash := false
+	// "s" is a RUNE ||| echo "A \\ escapes itself" => A \ escapes itself
+	for _, s := range prompt {
 		// fmt.Printf("I: %d - S: %q\n", i, s)
-		switch s {
-		case '"':
-			isDoubleQuote = !isDoubleQuote
-		case '\'':
+		switch {
+		case isSlash:
+			builder.WriteRune(s)
+			isSlash = false
+		case s == '\\' && !isDoubleQuote && !isSingleQuote:
+			isSlash = true
+		case s == '\'' && !isDoubleQuote:
 			isSingleQuote = !isSingleQuote
-			if isDoubleQuote {
-				builder.WriteRune('\'')
-				// if isSingleQuote is true but we are in a DoubleQuote terrain,
-				// it does not matter because DoubleQuote takes precedence
-				// so we reset it back like it was never encountered after making it
-				// part of the full string
-				isSingleQuote = false
+		case s == '"' && !isSingleQuote:
+			isDoubleQuote = !isDoubleQuote
+		case unicode.IsSpace(s) && !isDoubleQuote && !isSingleQuote:
+			if builder.Len() != 0 {
+				fragments = append(fragments, builder.String())
+				builder.Reset()
 			}
-		case ' ':
-			if isSingleQuote || isDoubleQuote {
-				builder.WriteString(" ")
-			} else {
-				// prevent append empty string to the slice
-				if builder.Len() != 0 {
-					fragments = append(fragments, builder.String())
-					builder.Reset()
-				}
-			}
-		// if we have a slash(\), then the next character is very important and probably more important than the current slash being evaluated
-		case '\\':
-			fmt.Println("slash encountered")
-			nextChar := prompt[i+1] // may panic if index is out of bound
-			builder.WriteByte(nextChar)
 		default:
 			builder.WriteRune(s)
 		}
 
+		// ["echo", "A", ]
 	}
 
 	if builder.Len() != 0 {
 		fragments = append(fragments, builder.String())
 	}
 
-	c.inputPrompt = strings.Join(fragments, " ")
+	c.tokens = fragments
 
 }
