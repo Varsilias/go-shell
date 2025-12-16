@@ -180,15 +180,23 @@ func (c *Command) normalizeQuotes() {
 	for _, s := range prompt {
 		// fmt.Printf("I: %d - S: %q\n", i, s)
 		switch {
+		case isSlash && isDoubleQuote:
+			if s == '$' || s == '"' || s == '\\' {
+				builder.WriteRune(s)
+			} else {
+				builder.WriteRune('\\')
+				builder.WriteRune(s)
+			}
+			isSlash = false
 		case isSlash:
 			builder.WriteRune(s)
 			isSlash = false
-		case s == '\\' && !isDoubleQuote && !isSingleQuote:
-			isSlash = true
 		case s == '\'' && !isDoubleQuote:
 			isSingleQuote = !isSingleQuote
 		case s == '"' && !isSingleQuote:
 			isDoubleQuote = !isDoubleQuote
+		case s == '\\' && !isSingleQuote:
+			isSlash = true
 		case unicode.IsSpace(s) && !isDoubleQuote && !isSingleQuote:
 			if builder.Len() != 0 {
 				fragments = append(fragments, builder.String())
@@ -198,7 +206,6 @@ func (c *Command) normalizeQuotes() {
 			builder.WriteRune(s)
 		}
 
-		// ["echo", "A", ]
 	}
 
 	if builder.Len() != 0 {
