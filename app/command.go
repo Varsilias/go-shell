@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -195,37 +194,28 @@ func (c *Command) ChangeDir(args []string) {
 }
 
 func (c *Command) findExecutable(cmd string) string {
-	var cmdPath string
+	if strings.Contains(cmd, "/") {
+		if info, err := os.Stat(cmd); err == nil && !info.IsDir() && (info.Mode()&0111 != 0) {
+			return cmd
+		}
+		return ""
+	}
 	systemPath := os.Getenv("PATH")
-	dirs := strings.SplitSeq(systemPath, string(os.PathListSeparator))
+	dirs := filepath.SplitList(systemPath)
 
 	// Example: Dirs = ["/usr/local/bin", "/Users/<username>/.cargo/bin"]
-	for dir := range dirs {
-		filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
+	for _, dir := range dirs {
+		fullPath := filepath.Join(dir, cmd)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			continue
+		}
 
-			// it means that we have found an executable
-			// with this command name
-			if !d.IsDir() && d.Name() == cmd {
-				fileInfo, err := os.Stat(path)
-				if err != nil {
-					fmt.Printf("Warning: failed to get file info for %s: %v", path, err)
-					return nil
-				}
-
-				mode := fileInfo.Mode()
-				if mode&0111 != 0 {
-					cmdPath = path
-					return StopWalk
-				}
-			}
-			return nil
-
-		})
+		if !info.IsDir() && (info.Mode()&0111 != 0) {
+			return fullPath
+		}
 	}
-	return cmdPath
+	return ""
 }
 
 func (c *Command) parseInputPrompt() (string, []string) {
