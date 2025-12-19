@@ -25,11 +25,16 @@ type Command struct {
 	inputPrompt       string
 	tokens            []string
 	fileAppendEnabled bool
+	redirectionTokens []string
+	appendTokens      []string
 }
 
 func NewCommand(prompt string) *Command {
 	return &Command{
-		inputPrompt: prompt,
+		inputPrompt:       prompt,
+		redirectionTokens: []string{">", ">>", "1>", "1>>", "2>", "2>>"},
+		appendTokens:      []string{">>", "2>>", "1>>"},
+		fileAppendEnabled: false,
 	}
 }
 
@@ -67,12 +72,12 @@ func (c *Command) CustomCommand(cmd string, args []string) int {
 	shouldCloseErr := false
 
 	// it means there is a redirection to STDOUT
-	if slices.Contains(args, ">") || slices.Contains(args, "1>") {
+	if c.shouldRedirectStdout() {
 		outStream, execArgs, err = c.createCustomStdout(args)
 		shouldClose = true
 	}
 
-	if slices.Contains(args, "2>") {
+	if c.shouldRedirectStderr() {
 		errStream, execArgs, err = c.createCustomStderr(args)
 		shouldCloseErr = true
 	}
@@ -112,7 +117,7 @@ func (c *Command) createCustomStdout(args []string) (*os.File, []string, error) 
 	var filePath []string
 
 	for i, arg := range args {
-		if arg == ">" || arg == "1>" {
+		if arg == ">" || arg == "1>" || arg == ">>" || arg == "1>>" {
 			filePath = append(filePath, args[i+1:]...)
 			break
 		}
@@ -152,12 +157,10 @@ func (c *Command) createCustomStderr(args []string) (*os.File, []string, error) 
 
 // Echo handles redirection specially
 func (c *Command) Echo(args []string) {
-	if !slices.Contains(args, ">") && !slices.Contains(args, "1>") && !slices.Contains(args, "2>") {
+	if !c.shouldRedirect() {
 		fmt.Fprintln(os.Stdout, strings.Join(args, " "))
 		return
 	}
-
-	// if we encounter an unquoted string before the redirection, echo the string and skip redirection
 
 	var outStream *os.File = os.Stdout // set the default output to standard output
 	var errStream *os.File = os.Stderr
@@ -167,12 +170,12 @@ func (c *Command) Echo(args []string) {
 	shouldCloseErr := false
 
 	// it means there is a redirection to STDOUT
-	if slices.Contains(args, ">") || slices.Contains(args, "1>") {
+	if c.shouldRedirectStdout() {
 		outStream, execArgs, err = c.createCustomStdout(args)
 		shouldClose = true
 	}
 
-	if slices.Contains(args, "2>") {
+	if c.shouldRedirectStderr() {
 		errStream, execArgs, err = c.createCustomStderr(args)
 		shouldCloseErr = true
 	}
@@ -276,6 +279,9 @@ func (c *Command) parseInputPrompt() (string, []string) {
 	if len(c.tokens) == 0 {
 		return "", nil
 	}
+
+	c.fileAppendEnabled = c.shouldEnableAppend()
+
 	return c.tokens[0], c.tokens[1:]
 }
 
@@ -328,6 +334,40 @@ func (c *Command) normalizeQuotes() {
 
 	c.tokens = fragments
 
+}
+
+func (c *Command) shouldRedirect() bool {
+	hasRedirectToken := slices.ContainsFunc(c.tokens, func(token string) bool {
+		return slices.Contains(c.redirectionTokens, token)
+	})
+
+	return hasRedirectToken
+}
+
+func (c *Command) shouldEnableAppend() bool {
+	hasAppendToken := slices.ContainsFunc(c.tokens, func(token string) bool {
+		return slices.Contains(c.appendTokens, token)
+	})
+
+	return hasAppendToken
+}
+
+func (c *Command) shouldRedirectStdout() bool {
+	soutTokens := []string{">", ">>", "1>", "1>>"}
+	hasSoutRedirectToken := slices.ContainsFunc(c.tokens, func(token string) bool {
+		return slices.Contains(soutTokens, token)
+	})
+
+	return hasSoutRedirectToken
+}
+
+func (c *Command) shouldRedirectStderr() bool {
+	serrTokens := []string{"2>", "2>>"}
+	hasSerrRedirectToken := slices.ContainsFunc(c.tokens, func(token string) bool {
+		return slices.Contains(serrTokens, token)
+	})
+
+	return hasSerrRedirectToken
 }
 
 func (c *Command) getFlags() int {
