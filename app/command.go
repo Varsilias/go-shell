@@ -139,7 +139,7 @@ func (c *Command) createCustomStderr(args []string) (*os.File, []string, error) 
 	var filePath []string
 
 	for i, arg := range args {
-		if arg == "2>" {
+		if arg == "2>" || arg == "2>>" {
 			filePath = append(filePath, args[i+1:]...)
 			break
 		}
