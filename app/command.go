@@ -22,8 +22,9 @@ var builtins = map[string]bool{
 var StopWalk = errors.New("command found, stopping walk")
 
 type Command struct {
-	inputPrompt string
-	tokens      []string
+	inputPrompt       string
+	tokens            []string
+	fileAppendEnabled bool
 }
 
 func NewCommand(prompt string) *Command {
@@ -59,14 +60,21 @@ func (c *Command) CustomCommand(cmd string, args []string) int {
 	}
 
 	var outStream *os.File = os.Stdout // set the default output to standard output
-	var execArgs []string = args       // set to already passed in args by default
+	var errStream *os.File = os.Stderr
+	var execArgs []string = args // set to already passed in args by default
 	var err error
 	shouldClose := false
+	shouldCloseErr := false
 
 	// it means there is a redirection to STDOUT
 	if slices.Contains(args, ">") || slices.Contains(args, "1>") {
 		outStream, execArgs, err = c.createCustomStdout(args)
 		shouldClose = true
+	}
+
+	if slices.Contains(args, "2>") {
+		errStream, execArgs, err = c.createCustomStderr(args)
+		shouldCloseErr = true
 	}
 
 	if err != nil {
@@ -77,12 +85,17 @@ func (c *Command) CustomCommand(cmd string, args []string) int {
 	if shouldClose {
 		defer outStream.Close()
 	}
+
+	if shouldCloseErr {
+		defer errStream.Close()
+	}
+
 	command := exec.Command(cmdPath, execArgs...)
 	command.Args = append([]string{cmd}, execArgs...)
 
 	command.Stdout = outStream
 	command.Stdin = os.Stdin
-	command.Stderr = os.Stderr
+	command.Stderr = errStream
 
 	if err := command.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
@@ -107,9 +120,31 @@ func (c *Command) createCustomStdout(args []string) (*os.File, []string, error) 
 		execArgs = append(execArgs, arg)
 	}
 
-	file, err := os.Create(strings.Join(filePath, ""))
+	flags := c.getFlags()
+	file, err := os.OpenFile(strings.Join(filePath, ""), flags, 0644)
 	if err != nil {
-		return nil, nil, err
+		return nil, execArgs, err
+	}
+
+	return file, execArgs, nil
+}
+
+func (c *Command) createCustomStderr(args []string) (*os.File, []string, error) {
+	var execArgs []string
+	var filePath []string
+
+	for i, arg := range args {
+		if arg == "2>" {
+			filePath = append(filePath, args[i+1:]...)
+			break
+		}
+
+		execArgs = append(execArgs, arg)
+	}
+	flags := c.getFlags()
+	file, err := os.OpenFile(strings.Join(filePath, ""), flags, 0644)
+	if err != nil {
+		return nil, execArgs, err
 	}
 
 	return file, execArgs, nil
@@ -117,20 +152,29 @@ func (c *Command) createCustomStdout(args []string) (*os.File, []string, error) 
 
 // Echo handles redirection specially
 func (c *Command) Echo(args []string) {
-	if !slices.Contains(args, ">") && !slices.Contains(args, "1>") {
+	if !slices.Contains(args, ">") && !slices.Contains(args, "1>") && !slices.Contains(args, "2>") {
 		fmt.Fprintln(os.Stdout, strings.Join(args, " "))
 		return
 	}
 
+	// if we encounter an unquoted string before the redirection, echo the string and skip redirection
+
 	var outStream *os.File = os.Stdout // set the default output to standard output
-	var execArgs []string = args       // set to already passed in args by default
+	var errStream *os.File = os.Stderr
+	var execArgs []string = args // set to already passed in args by default
 	var err error
 	shouldClose := false
+	shouldCloseErr := false
 
 	// it means there is a redirection to STDOUT
 	if slices.Contains(args, ">") || slices.Contains(args, "1>") {
 		outStream, execArgs, err = c.createCustomStdout(args)
 		shouldClose = true
+	}
+
+	if slices.Contains(args, "2>") {
+		errStream, execArgs, err = c.createCustomStderr(args)
+		shouldCloseErr = true
 	}
 
 	if err != nil {
@@ -142,7 +186,16 @@ func (c *Command) Echo(args []string) {
 		defer outStream.Close()
 	}
 
+	if shouldCloseErr {
+		defer errStream.Close()
+	}
+
 	execArgs = append(execArgs, "\n")
+
+	if errStream != nil && errStream != os.Stderr {
+		fmt.Fprintln(os.Stdout, c.tokens[1])
+		return
+	}
 	io.WriteString(outStream, strings.Join(execArgs, " "))
 }
 
@@ -275,4 +328,14 @@ func (c *Command) normalizeQuotes() {
 
 	c.tokens = fragments
 
+}
+
+func (c *Command) getFlags() int {
+	flag := os.O_CREATE | os.O_WRONLY
+	if c.fileAppendEnabled {
+		flag |= os.O_APPEND
+	} else {
+		flag |= os.O_TRUNC
+	}
+	return flag
 }

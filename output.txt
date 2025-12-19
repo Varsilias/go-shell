@@ -1,9 +1,0 @@
-README.md
-app
-codecrafters.yml
-go.mod
-go.sum
-output.txt
-test_dir
-your_program.sh
-
