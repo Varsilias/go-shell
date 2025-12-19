@@ -3,10 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -54,12 +56,33 @@ func (c *Command) Execute() {
 func (c *Command) CustomCommand(cmd string, args []string) int {
 	cmdPath := c.findExecutable(cmd)
 	if cmdPath == "" {
-		fmt.Printf("%s: command not found\n", c.inputPrompt)
+		fmt.Printf("%s: command not found\n", c.tokens[0])
 	}
-	command := exec.Command(cmdPath, args...)
-	command.Args = append([]string{cmd}, args...)
+
+	var outStream *os.File = os.Stdout // set the default output to standard output
+	var execArgs []string = args       // set to already passed in args by default
+	var err error
+	shouldClose := false
+
+	// it means there is a redirection to STDOUT
+	if slices.Contains(args, ">") || slices.Contains(args, "1>") {
+		outStream, execArgs, err = c.createCustomStdout(args)
+		shouldClose = true
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s: No such file or directory\n", cmd, strings.Join(execArgs, " "))
+		return 1
+	}
+
+	if shouldClose {
+		defer outStream.Close()
+	}
+	command := exec.Command(cmdPath, execArgs...)
+	command.Args = append([]string{cmd}, execArgs...)
+
+	command.Stdout = outStream
 	command.Stdin = os.Stdin
-	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 
 	if err := command.Run(); err != nil {
@@ -72,8 +95,56 @@ func (c *Command) CustomCommand(cmd string, args []string) int {
 	return 0
 }
 
+func (c *Command) createCustomStdout(args []string) (*os.File, []string, error) {
+	var execArgs []string
+	var filePath []string
+
+	for i, arg := range args {
+		if arg == ">" || arg == "1>" {
+			filePath = append(filePath, args[i+1:]...)
+			break
+		}
+
+		execArgs = append(execArgs, arg)
+	}
+
+	file, err := os.Create(strings.Join(filePath, ""))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return file, execArgs, nil
+}
+
+// Echo handles redirection specially
 func (c *Command) Echo(args []string) {
-	fmt.Fprintln(os.Stdout, strings.Join(args, " "))
+	if !slices.Contains(args, ">") && !slices.Contains(args, "1>") {
+		fmt.Fprintln(os.Stdout, strings.Join(args, " "))
+		return
+	}
+
+	var outStream *os.File = os.Stdout // set the default output to standard output
+	var execArgs []string = args       // set to already passed in args by default
+	var err error
+	shouldClose := false
+
+	// it means there is a redirection to STDOUT
+	if slices.Contains(args, ">") || slices.Contains(args, "1>") {
+		outStream, execArgs, err = c.createCustomStdout(args)
+		shouldClose = true
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s: No such file or directory", c.tokens[0], strings.Join(execArgs, " "))
+		return
+	}
+
+	if shouldClose {
+		defer outStream.Close()
+	}
+
+	execArgs = append(execArgs, "\n")
+	io.WriteString(outStream, strings.Join(execArgs, " "))
 }
 
 func (c *Command) Type(cmd string) {
