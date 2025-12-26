@@ -19,8 +19,9 @@ func main() {
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          "$ ",
-		AutoComplete:    completer,
+		AutoComplete:    bellCompleter{inner: completer},
 		InterruptPrompt: "^C",
+		HistoryFile:     "/tmp/shell-history.tmp",
 	})
 	if err != nil {
 		log.Fatal(err)

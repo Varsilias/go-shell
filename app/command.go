@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/chzyer/readline"
 )
 
 var builtins = map[string]bool{
@@ -27,6 +29,19 @@ type Command struct {
 	fileAppendEnabled bool
 	redirectionTokens []string
 	appendTokens      []string
+}
+
+type bellCompleter struct {
+	inner readline.AutoCompleter
+}
+
+func (b bellCompleter) Do(line []rune, pos int) ([][]rune, int) {
+	res, n := b.inner.Do(line, pos)
+	if len(res) == 0 {
+		fmt.Fprint(os.Stdout, "\x07")
+	}
+
+	return res, n
 }
 
 func NewCommand(prompt string) *Command {
