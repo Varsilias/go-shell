@@ -8,18 +8,11 @@ import (
 )
 
 func main() {
-	completerConfig := []readline.PrefixCompleterInterface{}
-	builtinCmds := []string{"echo", "exit", "type", "pwd", "cd"}
-	for _, c := range builtinCmds {
-		completerConfig = append(completerConfig, &readline.PrefixCompleter{
-			Name: []rune(c + " "),
-		})
-	}
-	completer := readline.NewPrefixCompleter(completerConfig...)
+	instance := NewCompleter()
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          "$ ",
-		AutoComplete:    bellCompleter{inner: completer},
+		AutoComplete:    instance,
 		InterruptPrompt: "^C",
 		HistoryFile:     "/tmp/shell-history.tmp",
 	})
