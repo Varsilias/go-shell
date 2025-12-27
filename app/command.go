@@ -27,6 +27,8 @@ type Command struct {
 	fileAppendEnabled bool
 	redirectionTokens []string
 	appendTokens      []string
+	stdin             io.Reader
+	stdout            io.Writer
 }
 
 func NewCommand(prompt string) *Command {
@@ -35,17 +37,28 @@ func NewCommand(prompt string) *Command {
 		redirectionTokens: []string{">", ">>", "1>", "1>>", "2>", "2>>"},
 		appendTokens:      []string{">>", "2>>", "1>>"},
 		fileAppendEnabled: false,
+		stdin:             os.Stdin,
+		stdout:            os.Stdout,
 	}
 }
 
 func (c *Command) Execute() {
-	cmd, args := c.parseInputPrompt()
+	var cmd string
+	var args []string
+
+	if len(c.tokens) == 0 {
+		cmd, args = c.parseInputPrompt()
+	} else {
+		cmd = c.tokens[0]
+		args = c.tokens[1:]
+	}
+
 	if len(cmd) == 0 {
 		return
 	}
 
-	if slices.Contains(c.tokens, "|") {
-		c.handlePipeline()
+	if pipeIndex := slices.Index(c.tokens, "|"); pipeIndex != -1 {
+		c.handlePipeline(pipeIndex)
 		return
 	}
 
@@ -66,8 +79,7 @@ func (c *Command) Execute() {
 
 }
 
-func (c *Command) handlePipeline() {
-	pipeIndex := slices.Index(c.tokens, "|")
+func (c *Command) handlePipeline(pipeIndex int) {
 	leftCmd := c.tokens[:pipeIndex]
 	rightCmd := c.tokens[pipeIndex+1:]
 
@@ -78,34 +90,58 @@ func (c *Command) handlePipeline() {
 	}
 
 	// run LHS command as subprocess
-	cmd1Path := c.findExecutable(leftCmd[0])
-	cmd1 := exec.Command(cmd1Path, leftCmd[1:]...)
-	cmd1.Stdin = os.Stdin
-	cmd1.Stdout = pw
-	cmd1.Stderr = os.Stderr
+	go func() {
+		defer pw.Close()
+		cmdLeft := &Command{
+			tokens:            leftCmd,
+			stdout:            pw,
+			stdin:             c.stdin,
+			redirectionTokens: c.redirectionTokens,
+			appendTokens:      c.appendTokens,
+		}
+		cmdLeft.Execute()
+	}()
 
-	// run RHS command as second subprocess
-	cmd2Path := c.findExecutable(rightCmd[0])
-	cmd2 := exec.Command(cmd2Path, rightCmd[1:]...)
-	cmd2.Stdin = pr
-	cmd2.Stdout = os.Stdout
-	cmd2.Stderr = os.Stderr
-
-	if err := cmd1.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
+	cmdRight := &Command{
+		tokens:            rightCmd,
+		stdout:            c.stdout,
+		stdin:             pr,
+		redirectionTokens: c.redirectionTokens,
+		appendTokens:      c.appendTokens,
 	}
+	cmdRight.Execute()
 
-	if err := cmd2.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
-	}
-
-	pw.Close()
 	pr.Close()
 
-	cmd1.Wait()
-	cmd2.Wait()
+	// run LHS command as subprocess
+	// cmd1Path := c.findExecutable(leftCmd[0])
+	// cmd1 := exec.Command(cmd1Path, leftCmd[1:]...)
+	// cmd1.Stdin = os.Stdin
+	// cmd1.Stdout = pw
+	// cmd1.Stderr = os.Stderr
+
+	// run RHS command as second subprocess
+	// cmd2Path := c.findExecutable(rightCmd[0])
+	// cmd2 := exec.Command(cmd2Path, rightCmd[1:]...)
+	// cmd2.Stdin = pr
+	// cmd2.Stdout = os.Stdout
+	// cmd2.Stderr = os.Stderr
+
+	// if err := cmd1.Start(); err != nil {
+	// 	fmt.Fprintln(os.Stderr, err)
+	// 	return
+	// }
+
+	// if err := cmd2.Start(); err != nil {
+	// 	fmt.Fprintln(os.Stderr, err)
+	// 	return
+	// }
+
+	// pw.Close()
+	// pr.Close()
+
+	// cmd1.Wait()
+	// cmd2.Wait()
 
 }
 
@@ -115,22 +151,26 @@ func (c *Command) CustomCommand(cmd string, args []string) int {
 		fmt.Printf("%s: command not found\n", c.tokens[0])
 	}
 
-	var outStream *os.File = os.Stdout // set the default output to standard output
-	var errStream *os.File = os.Stderr
+	var outStream io.Writer = c.stdout // set the default output to standard output
+	var errStream io.Writer = os.Stderr
 	var execArgs []string = args // set to already passed in args by default
 	var err error
-	shouldClose := false
-	shouldCloseErr := false
 
 	// it means there is a redirection to STDOUT
 	if c.shouldRedirectStdout() {
-		outStream, execArgs, err = c.createCustomStdout(args)
-		shouldClose = true
+		f, newArgs, ferr := c.createCustomStdout(args)
+		err = ferr
+		outStream = f
+		execArgs = newArgs
+		defer f.Close()
 	}
 
 	if c.shouldRedirectStderr() {
-		errStream, execArgs, err = c.createCustomStderr(args)
-		shouldCloseErr = true
+		f, newArgs, ferr := c.createCustomStderr(args)
+		err = ferr
+		errStream = f
+		execArgs = newArgs
+		defer f.Close()
 	}
 
 	if err != nil {
@@ -138,19 +178,11 @@ func (c *Command) CustomCommand(cmd string, args []string) int {
 		return 1
 	}
 
-	if shouldClose {
-		defer outStream.Close()
-	}
-
-	if shouldCloseErr {
-		defer errStream.Close()
-	}
-
 	command := exec.Command(cmdPath, execArgs...)
 	command.Args = append([]string{cmd}, execArgs...)
 
+	command.Stdin = c.stdin
 	command.Stdout = outStream
-	command.Stdin = os.Stdin
 	command.Stderr = errStream
 
 	if err := command.Run(); err != nil {
@@ -209,26 +241,31 @@ func (c *Command) createCustomStderr(args []string) (*os.File, []string, error) 
 // Echo handles redirection specially
 func (c *Command) Echo(args []string) {
 	if !c.shouldRedirect() {
-		fmt.Fprintln(os.Stdout, strings.Join(args, " "))
+		fmt.Fprintln(c.stdout, strings.Join(args, " "))
 		return
 	}
 
-	var outStream *os.File = os.Stdout // set the default output to standard output
-	var errStream *os.File = os.Stderr
+	var outStream io.Writer = c.stdout // set the default output to standard output
+	var errStream io.Writer = os.Stderr
 	var execArgs []string = args // set to already passed in args by default
 	var err error
-	shouldClose := false
-	shouldCloseErr := false
 
 	// it means there is a redirection to STDOUT
 	if c.shouldRedirectStdout() {
-		outStream, execArgs, err = c.createCustomStdout(args)
-		shouldClose = true
+		f, newArgs, ferr := c.createCustomStdout(args)
+		err = ferr
+		outStream = f
+		execArgs = newArgs
+		defer f.Close()
 	}
 
 	if c.shouldRedirectStderr() {
-		errStream, execArgs, err = c.createCustomStderr(args)
-		shouldCloseErr = true
+		f, newArgs, ferr := c.createCustomStderr(args)
+		err = ferr
+		errStream = f
+		execArgs = newArgs
+		defer f.Close()
+
 	}
 
 	if err != nil {
@@ -236,18 +273,10 @@ func (c *Command) Echo(args []string) {
 		return
 	}
 
-	if shouldClose {
-		defer outStream.Close()
-	}
-
-	if shouldCloseErr {
-		defer errStream.Close()
-	}
-
 	execArgs = append(execArgs, "\n")
 
 	if errStream != nil && errStream != os.Stderr {
-		fmt.Fprintln(os.Stdout, c.tokens[1])
+		fmt.Fprintln(c.stdout, c.tokens[1])
 		return
 	}
 	io.WriteString(outStream, strings.Join(execArgs, " "))
@@ -255,7 +284,7 @@ func (c *Command) Echo(args []string) {
 
 func (c *Command) Type(cmd string) {
 	if builtins[cmd] {
-		fmt.Printf("%s is a shell builtin\n", cmd)
+		fmt.Fprintf(c.stdout, "%s is a shell builtin\n", cmd)
 		return
 	}
 
@@ -275,7 +304,7 @@ func (c *Command) Pwd() {
 		os.Exit(1)
 	}
 
-	fmt.Println(path)
+	fmt.Fprintln(c.stdout, path)
 }
 
 func (c *Command) ChangeDir(args []string) {
