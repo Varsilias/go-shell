@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -20,7 +22,7 @@ type ICompleter struct {
 
 func NewCompleter() *ICompleter {
 	instance := &ICompleter{
-		builtinCmds: []string{"echo", "exit", "type", "pwd", "cd"},
+		builtinCmds: slices.Collect(maps.Keys(builtins)),
 	}
 	completerConfig := []readline.PrefixCompleterInterface{}
 	cmds := instance.getUniqueCmds()

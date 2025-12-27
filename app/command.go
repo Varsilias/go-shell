@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -13,11 +14,12 @@ import (
 )
 
 var builtins = map[string]bool{
-	"echo": true,
-	"type": true,
-	"exit": true,
-	"pwd":  true,
-	"cd":   true,
+	"echo":    true,
+	"type":    true,
+	"exit":    true,
+	"pwd":     true,
+	"cd":      true,
+	"history": true,
 }
 var StopWalk = errors.New("command found, stopping walk")
 
@@ -73,6 +75,8 @@ func (c *Command) Execute() {
 		c.Pwd()
 	case "cd":
 		c.ChangeDir(args)
+	case "history":
+		c.History()
 	default:
 		c.CustomCommand(cmd, args)
 	}
@@ -326,6 +330,26 @@ func (c *Command) ChangeDir(args []string) {
 	err := os.Chdir(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cd: %s: No such file or directory\n", path)
+	}
+}
+
+// 1  previous_command_1
+func (c *Command) History() {
+	file, err := os.Open(historyFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	counter := 0
+	for scanner.Scan() {
+		counter++
+		fmt.Fprintf(c.stdout, "%4d  %s\n", counter, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 	}
 }
 

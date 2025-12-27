@@ -7,6 +7,8 @@ import (
 	"github.com/chzyer/readline"
 )
 
+const historyFile = "/tmp/shell-history.tmp"
+
 func main() {
 	instance := NewCompleter()
 
@@ -14,7 +16,7 @@ func main() {
 		Prompt:          "$ ",
 		AutoComplete:    instance,
 		InterruptPrompt: "^C",
-		HistoryFile:     "/tmp/shell-history.tmp",
+		HistoryFile:     historyFile,
 	})
 	if err != nil {
 		log.Fatal(err)
