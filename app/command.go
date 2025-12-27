@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -76,7 +77,7 @@ func (c *Command) Execute() {
 	case "cd":
 		c.ChangeDir(args)
 	case "history":
-		c.History()
+		c.History(args)
 	default:
 		c.CustomCommand(cmd, args)
 	}
@@ -334,7 +335,8 @@ func (c *Command) ChangeDir(args []string) {
 }
 
 // 1  previous_command_1
-func (c *Command) History() {
+func (c *Command) History(args []string) {
+	var pastCommands []string
 	file, err := os.Open(historyFile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -342,14 +344,29 @@ func (c *Command) History() {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	counter := 0
+
 	for scanner.Scan() {
-		counter++
-		fmt.Fprintf(c.stdout, "%4d  %s\n", counter, scanner.Text())
+		pastCommands = append(pastCommands, scanner.Text())
 	}
 
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+	}
+
+	if len(args) > 0 {
+		n, err := strconv.Atoi(args[0])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		startPoint := len(pastCommands) - n
+
+		for i := startPoint; i < len(pastCommands); i++ {
+			fmt.Fprintf(c.stdout, "%5d  %s\n", i+1, pastCommands[i])
+		}
+		return
+	}
+	for i, prompt := range pastCommands {
+		fmt.Fprintf(c.stdout, "%5d  %s\n", i+1, prompt)
 	}
 }
 

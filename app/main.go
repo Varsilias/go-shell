@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"log"
+	"os"
 
 	"github.com/chzyer/readline"
 )
@@ -10,6 +11,10 @@ import (
 const historyFile = "/tmp/shell-history.tmp"
 
 func main() {
+	f, err := os.OpenFile(historyFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err == nil {
+		defer f.Close()
+	}
 	instance := NewCompleter()
 
 	rl, err := readline.NewEx(&readline.Config{
