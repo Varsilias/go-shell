@@ -337,7 +337,7 @@ func (c *Command) ChangeDir(args []string) {
 // 1  previous_command_1
 func (c *Command) History(args []string) {
 	var pastCommands []string
-	file, err := os.Open(historyFile)
+	file, err := os.OpenFile(historyFile, os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
@@ -353,7 +353,16 @@ func (c *Command) History(args []string) {
 		fmt.Fprintln(os.Stderr, err)
 	}
 
-	if len(args) > 0 {
+	if len(args) > 1 { // it means there is a "-r" + <path_to_history_file>
+		f, err := os.ReadFile(args[1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		io.Writer.Write(file, f)
+		return
+	}
+
+	if len(args) == 1 {
 		n, err := strconv.Atoi(args[0])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
