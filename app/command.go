@@ -353,12 +353,28 @@ func (c *Command) History(args []string) {
 		fmt.Fprintln(os.Stderr, err)
 	}
 
-	if len(args) > 1 { // it means there is a "-r" + <path_to_history_file>
+	if len(args) > 1 && args[0] == "-r" { // it means there is a "-r" + <path_to_history_file>
 		f, err := os.ReadFile(args[1])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 		io.Writer.Write(file, f)
+		return
+	}
+
+	if len(args) > 1 && args[0] == "-w" { // it means there is a "-r" + <path_to_history_file>
+		writeFile, err := os.OpenFile(args[1], os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		defer writeFile.Close()
+
+		_, _ = file.Seek(0, 0)
+		_, err = io.Copy(writeFile, file)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return
+		}
 		return
 	}
 
