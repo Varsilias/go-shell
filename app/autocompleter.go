@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
@@ -54,6 +52,22 @@ func (c *ICompleter) Do(line []rune, pos int) ([][]rune, int) {
 		}
 	}
 
+	if len(matches) == 0 {
+		fmt.Fprint(os.Stdout, "\x07")
+		return nil, 0
+	}
+
+	lcp := findLCP(matches)
+	if len(lcp) > len(currentInput) {
+		c.tabCount = 0
+		suffix := lcp[len(currentInput):] // get the part of the lcp that should be added
+
+		if len(matches) == 1 {
+			suffix += " "
+		}
+		return [][]rune{[]rune(suffix)}, len(currentInput)
+	}
+
 	// when there is only match for the current input
 	// just part of the match and the readline package will
 	// append it to the current in
@@ -70,20 +84,40 @@ func (c *ICompleter) Do(line []rune, pos int) ([][]rune, int) {
 			fmt.Fprint(os.Stdout, "\x07")
 			return nil, 0
 		} else if c.tabCount >= 2 {
-			sort.Strings(matches)
 			fmt.Print("\r\n")
 			fmt.Println(strings.Join(matches, "  "))
 			fmt.Print("$ " + currentInput)
+			c.tabCount = 0
 			return nil, 0
 		}
 	}
 
-	res, n := c.completer.Do(line, pos)
-	if len(res) == 0 {
-		fmt.Fprint(os.Stdout, "\x07")
+	return nil, 0
+}
+
+func findLCP(matches []string) string {
+	if len(matches) == 0 {
+		return ""
 	}
 
-	return res, n
+	if len(matches) == 1 {
+		return matches[0]
+	}
+
+	/*
+		matches = ["xyz_foo_bar", "xyz_foo_baz", "xyz_fox"]
+		user types "xyz"
+	*/
+	// Since matches is already sorted:
+	first := matches[0]             // "xyz_foo_bar" => len = 11
+	last := matches[len(matches)-1] // "xyz_fox" => len = 7
+
+	// Find the common part between only the first and last
+	i := 0
+	for i < len(first) && i < len(last) && first[i] == last[i] {
+		i++
+	}
+	return first[:i]
 }
 
 func (c *ICompleter) findExecutables() []string {
@@ -118,14 +152,20 @@ func (c *ICompleter) findExecutables() []string {
 }
 
 func (c *ICompleter) getUniqueCmds() []string {
-	uniqueCmds := make(map[string]bool)
-	allCmds := append(c.builtinCmds, c.findExecutables()...)
+	uniqueMap := make(map[string]struct{})
 
-	for _, cmd := range allCmds {
-		if uniqueCmds[cmd] {
-			continue
-		}
-		uniqueCmds[cmd] = true
+	for _, cmd := range c.builtinCmds {
+		uniqueMap[cmd] = struct{}{}
 	}
-	return slices.Collect(maps.Keys(uniqueCmds))
+	for _, cmd := range c.findExecutables() {
+		uniqueMap[cmd] = struct{}{}
+	}
+
+	// Collect Map Keys
+	result := make([]string, 0, len(uniqueMap))
+	for cmd := range uniqueMap {
+		result = append(result, cmd)
+	}
+	sort.Strings(result)
+	return result
 }
