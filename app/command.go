@@ -10,8 +10,6 @@ import (
 	"slices"
 	"strings"
 	"unicode"
-
-	"github.com/chzyer/readline"
 )
 
 var builtins = map[string]bool{
@@ -31,19 +29,6 @@ type Command struct {
 	appendTokens      []string
 }
 
-type bellCompleter struct {
-	inner readline.AutoCompleter
-}
-
-func (b bellCompleter) Do(line []rune, pos int) ([][]rune, int) {
-	res, n := b.inner.Do(line, pos)
-	if len(res) == 0 {
-		fmt.Fprint(os.Stdout, "\x07")
-	}
-
-	return res, n
-}
-
 func NewCommand(prompt string) *Command {
 	return &Command{
 		inputPrompt:       prompt,
@@ -55,6 +40,14 @@ func NewCommand(prompt string) *Command {
 
 func (c *Command) Execute() {
 	cmd, args := c.parseInputPrompt()
+	if len(cmd) == 0 {
+		return
+	}
+
+	if slices.Contains(c.tokens, "|") {
+		c.handlePipeline()
+		return
+	}
 
 	switch cmd {
 	case "exit":
@@ -70,6 +63,49 @@ func (c *Command) Execute() {
 	default:
 		c.CustomCommand(cmd, args)
 	}
+
+}
+
+func (c *Command) handlePipeline() {
+	pipeIndex := slices.Index(c.tokens, "|")
+	leftCmd := c.tokens[:pipeIndex]
+	rightCmd := c.tokens[pipeIndex+1:]
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pipe error: %s", err)
+		return
+	}
+
+	// run LHS command as subprocess
+	cmd1Path := c.findExecutable(leftCmd[0])
+	cmd1 := exec.Command(cmd1Path, leftCmd[1:]...)
+	cmd1.Stdin = os.Stdin
+	cmd1.Stdout = pw
+	cmd1.Stderr = os.Stderr
+
+	// run RHS command as second subprocess
+	cmd2Path := c.findExecutable(rightCmd[0])
+	cmd2 := exec.Command(cmd2Path, rightCmd[1:]...)
+	cmd2.Stdin = pr
+	cmd2.Stdout = os.Stdout
+	cmd2.Stderr = os.Stderr
+
+	if err := cmd1.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+
+	if err := cmd2.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+
+	pw.Close()
+	pr.Close()
+
+	cmd1.Wait()
+	cmd2.Wait()
 
 }
 
