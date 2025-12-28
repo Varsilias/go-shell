@@ -4,19 +4,43 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/chzyer/readline"
 )
 
-const historyFile = "/tmp/shell-history.tmp"
+var historyFile = "/tmp/shell-history.tmp"
 
 var historyOffset int
 
 func main() {
-	f, err := os.OpenFile(historyFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-	if err == nil {
-		defer f.Close()
+	histPath := os.Getenv("HISTFILE")
+
+	if histPath == "" {
+		histPath = "/tmp/shell-history.tmp"
 	}
+	if histPath != "" && histPath != "/dev/null" {
+		historyFile = histPath
+	}
+
+	if historyFile == "/tmp/shell-history.tmp" {
+		f, err := os.OpenFile(historyFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		if err == nil {
+			defer f.Close()
+		}
+	}
+
+	// 1. Count existing lines to set the initial offset
+	// This ensures we don't re-append what was already there on startup
+	if content, err := os.ReadFile(historyFile); err == nil {
+		lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+		if len(lines) == 1 && lines[0] == "" {
+			historyOffset = 0
+		} else {
+			historyOffset = len(lines)
+		}
+	}
+
 	instance := NewCompleter()
 
 	rl, err := readline.NewEx(&readline.Config{
@@ -46,7 +70,7 @@ func main() {
 			continue
 		}
 		// `line` is returned without the terminating \n or CRLF:
-		cmd := NewCommand(prompt, historyOffset)
+		cmd := NewCommand(prompt)
 		cmd.Execute()
 	}
 	// for {

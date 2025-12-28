@@ -32,10 +32,10 @@ type Command struct {
 	appendTokens      []string
 	inputPrompt       string
 	fileAppendEnabled bool
-	historyOffset     int
+	// historyOffset     int
 }
 
-func NewCommand(prompt string, historyOffset int) *Command {
+func NewCommand(prompt string) *Command {
 	return &Command{
 		inputPrompt:       prompt,
 		redirectionTokens: []string{">", ">>", "1>", "1>>", "2>", "2>>"},
@@ -43,7 +43,6 @@ func NewCommand(prompt string, historyOffset int) *Command {
 		fileAppendEnabled: false,
 		stdin:             os.Stdin,
 		stdout:            os.Stdout,
-		historyOffset:     historyOffset,
 	}
 }
 
@@ -417,8 +416,11 @@ func (c *Command) handleHistoryAppend(args []string, pastCommands []string) {
 	}
 	defer writeFile.Close()
 
+	// fmt.Println("pastCommands", pastCommands)
+	// fmt.Println("historyOffset", historyOffset)
+	// fmt.Println("historyFile", historyFile)
 	offset := len(pastCommands)
-	for i := c.historyOffset; i < offset; i++ {
+	for i := historyOffset; i < offset; i++ {
 		fmt.Fprintln(writeFile, pastCommands[i])
 	}
 
