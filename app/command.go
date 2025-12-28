@@ -416,6 +416,9 @@ func (c *Command) handleHistoryAppend(args []string, pastCommands []string) {
 	}
 	defer writeFile.Close()
 
+	// leaving this comment here because it
+	// saved me from the stress caused by "/dev/null"
+	// that broke: https://app.codecrafters.io/courses/shell/stages/zp4?repo=6b9f674f-03bf-4f8d-8d81-9a35608e17f2
 	// fmt.Println("pastCommands", pastCommands)
 	// fmt.Println("historyOffset", historyOffset)
 	// fmt.Println("historyFile", historyFile)
@@ -465,6 +468,11 @@ func (c *Command) parseInputPrompt() (string, []string) {
 	return c.tokens[0], c.tokens[1:]
 }
 
+// this function took the most of my mental energy
+// caused me to give up multiple times but I always came back
+// It also led me to understand how compilers and interpreters work
+// It also led me to read the Golang compiler design codebase
+// see: https://github.com/golang/go/blob/master/src/go/scanner/scanner.go
 // normalizeQuotes
 // E.G: echo "hello    world"
 func (c *Command) normalizeQuotes() {

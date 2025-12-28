@@ -19,6 +19,10 @@ func main() {
 	if histPath == "" {
 		histPath = "/tmp/shell-history.tmp"
 	}
+	// this part made me almost shade tears
+	// apparently the tester after testing for HISTFILE implementation
+	// sets the HISTFILE to "/dev/null" and this prevented an already
+	// working implementation to fail https://app.codecrafters.io/courses/shell/stages/zp4?repo=6b9f674f-03bf-4f8d-8d81-9a35608e17f2
 	if histPath != "" && histPath != "/dev/null" {
 		historyFile = histPath
 	}
