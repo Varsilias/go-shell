@@ -25,16 +25,17 @@ var builtins = map[string]bool{
 var StopWalk = errors.New("command found, stopping walk")
 
 type Command struct {
-	inputPrompt       string
-	tokens            []string
-	fileAppendEnabled bool
-	redirectionTokens []string
-	appendTokens      []string
 	stdin             io.Reader
 	stdout            io.Writer
+	tokens            []string
+	redirectionTokens []string
+	appendTokens      []string
+	inputPrompt       string
+	fileAppendEnabled bool
+	historyOffset     int
 }
 
-func NewCommand(prompt string) *Command {
+func NewCommand(prompt string, historyOffset int) *Command {
 	return &Command{
 		inputPrompt:       prompt,
 		redirectionTokens: []string{">", ">>", "1>", "1>>", "2>", "2>>"},
@@ -42,6 +43,7 @@ func NewCommand(prompt string) *Command {
 		fileAppendEnabled: false,
 		stdin:             os.Stdin,
 		stdout:            os.Stdout,
+		historyOffset:     historyOffset,
 	}
 }
 
@@ -354,27 +356,17 @@ func (c *Command) History(args []string) {
 	}
 
 	if len(args) > 1 && args[0] == "-r" { // it means there is a "-r" + <path_to_history_file>
-		f, err := os.ReadFile(args[1])
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		io.Writer.Write(file, f)
+		c.handleHistoryRead(args, file)
 		return
 	}
 
 	if len(args) > 1 && args[0] == "-w" { // it means there is a "-r" + <path_to_history_file>
-		writeFile, err := os.OpenFile(args[1], os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		defer writeFile.Close()
+		c.handleHistoryWrite(args, file)
+		return
+	}
 
-		_, _ = file.Seek(0, 0)
-		_, err = io.Copy(writeFile, file)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return
-		}
+	if len(args) > 1 && args[0] == "-a" { // it means there is a "-r" + <path_to_history_file>
+		c.handleHistoryAppend(args, pastCommands)
 		return
 	}
 
@@ -393,6 +385,46 @@ func (c *Command) History(args []string) {
 	for i, prompt := range pastCommands {
 		fmt.Fprintf(c.stdout, "%5d  %s\n", i+1, prompt)
 	}
+}
+
+func (c *Command) handleHistoryRead(args []string, file *os.File) {
+	f, err := os.ReadFile(args[1])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	io.Writer.Write(file, f)
+}
+
+func (c *Command) handleHistoryWrite(args []string, file *os.File) {
+	writeFile, err := os.OpenFile(args[1], os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	defer writeFile.Close()
+
+	_, _ = file.Seek(0, 0)
+	_, err = io.Copy(writeFile, file)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+}
+
+func (c *Command) handleHistoryAppend(args []string, pastCommands []string) {
+	writeFile, err := os.OpenFile(args[1], os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	defer writeFile.Close()
+
+	offset := len(pastCommands)
+	for i := c.historyOffset; i < offset; i++ {
+		fmt.Fprintln(writeFile, pastCommands[i])
+	}
+
+	// set gloabl history offset to most recent offset
+	// it should be passed in for every new prompt
+	historyOffset = offset
 }
 
 func (c *Command) findExecutable(cmd string) string {

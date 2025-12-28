@@ -1,5 +1,0 @@
-echo hello
-echo world
-cat file.txt | wc
-history
-history -w file2.txt

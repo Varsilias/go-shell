@@ -10,6 +10,8 @@ import (
 
 const historyFile = "/tmp/shell-history.tmp"
 
+var historyOffset int
+
 func main() {
 	f, err := os.OpenFile(historyFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err == nil {
@@ -44,7 +46,7 @@ func main() {
 			continue
 		}
 		// `line` is returned without the terminating \n or CRLF:
-		cmd := NewCommand(prompt)
+		cmd := NewCommand(prompt, historyOffset)
 		cmd.Execute()
 	}
 	// for {
