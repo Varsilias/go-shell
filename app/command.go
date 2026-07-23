@@ -11,7 +11,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode"
+
+	"github.com/codecrafters-io/shell-starter-go/app/parser"
 )
 
 var builtins = map[string]bool{
@@ -30,14 +31,14 @@ type Command struct {
 	tokens            []string
 	redirectionTokens []string
 	appendTokens      []string
-	inputPrompt       string
+	prompt            string
 	fileAppendEnabled bool
 	// historyOffset     int
 }
 
 func NewCommand(prompt string) *Command {
 	return &Command{
-		inputPrompt:       prompt,
+		prompt:            prompt,
 		redirectionTokens: []string{">", ">>", "1>", "1>>", "2>", "2>>"},
 		appendTokens:      []string{">>", "2>>", "1>>"},
 		fileAppendEnabled: false,
@@ -51,7 +52,7 @@ func (c *Command) Execute() {
 	var args []string
 
 	if len(c.tokens) == 0 {
-		cmd, args = c.parseInputPrompt()
+		cmd, args = c.parsePrompt()
 	} else {
 		cmd = c.tokens[0]
 		args = c.tokens[1:]
@@ -457,71 +458,16 @@ func (c *Command) findExecutable(cmd string) string {
 	return ""
 }
 
-func (c *Command) parseInputPrompt() (string, []string) {
-	c.normalizeQuotes()
-	if len(c.tokens) == 0 {
+func (c *Command) parsePrompt() (string, []string) {
+	tokens := parser.CleanPrompt(c.prompt)
+	if len(tokens) == 0 {
 		return "", nil
 	}
 
+	c.tokens = tokens
 	c.fileAppendEnabled = c.shouldEnableAppend()
 
 	return c.tokens[0], c.tokens[1:]
-}
-
-// this function took the most of my mental energy
-// caused me to give up multiple times but I always came back
-// It also led me to understand how compilers and interpreters work
-// It also led me to read the Golang compiler design codebase
-// see: https://github.com/golang/go/blob/master/src/go/scanner/scanner.go
-// normalizeQuotes
-// E.G: echo "hello    world"
-func (c *Command) normalizeQuotes() {
-	var fragments []string      // we will push each token(separate identifiers) into this list
-	var builder strings.Builder // this is used to construct each individual token
-	prompt := c.inputPrompt
-
-	// flags to know where we are and what we to consider
-	isSingleQuote := false
-	isDoubleQuote := false
-	isSlash := false
-	// "s" is a RUNE ||| echo "A \\ escapes itself" => A \ escapes itself
-	for _, s := range prompt {
-		// fmt.Printf("I: %d - S: %q\n", i, s)
-		switch {
-		case isSlash && isDoubleQuote:
-			if s == '$' || s == '"' || s == '\\' {
-				builder.WriteRune(s)
-			} else {
-				builder.WriteRune('\\')
-				builder.WriteRune(s)
-			}
-			isSlash = false
-		case isSlash:
-			builder.WriteRune(s)
-			isSlash = false
-		case s == '\'' && !isDoubleQuote:
-			isSingleQuote = !isSingleQuote
-		case s == '"' && !isSingleQuote:
-			isDoubleQuote = !isDoubleQuote
-		case s == '\\' && !isSingleQuote:
-			isSlash = true
-		case unicode.IsSpace(s) && !isDoubleQuote && !isSingleQuote:
-			if builder.Len() != 0 {
-				fragments = append(fragments, builder.String())
-				builder.Reset()
-			}
-		default:
-			builder.WriteRune(s)
-		}
-
-	}
-
-	if builder.Len() != 0 {
-		fragments = append(fragments, builder.String())
-	}
-
-	c.tokens = fragments
-
 }
 
 func (c *Command) shouldRedirect() bool {

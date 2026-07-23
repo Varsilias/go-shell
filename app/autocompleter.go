@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/chzyer/readline"
+	"github.com/codecrafters-io/shell-starter-go/app/utils"
 )
 
 type ICompleter struct {
@@ -59,7 +60,7 @@ func (c *ICompleter) Do(line []rune, pos int) ([][]rune, int) {
 		return nil, 0
 	}
 
-	lcp := findLCP(matches)
+	lcp := utils.LongestCommonPrefix(matches)
 	if len(lcp) > len(currentInput) {
 		c.tabCount = 0
 		suffix := lcp[len(currentInput):] // get the part of the lcp that should be added
@@ -95,31 +96,6 @@ func (c *ICompleter) Do(line []rune, pos int) ([][]rune, int) {
 	}
 
 	return nil, 0
-}
-
-func findLCP(matches []string) string {
-	if len(matches) == 0 {
-		return ""
-	}
-
-	if len(matches) == 1 {
-		return matches[0]
-	}
-
-	/*
-		matches = ["xyz_foo_bar", "xyz_foo_baz", "xyz_fox"]
-		user types "xyz"
-	*/
-	// Since matches is already sorted:
-	first := matches[0]             // "xyz_foo_bar" => len = 11
-	last := matches[len(matches)-1] // "xyz_fox" => len = 7
-
-	// Find the common part between only the first and last
-	i := 0
-	for i < len(first) && i < len(last) && first[i] == last[i] {
-		i++
-	}
-	return first[:i]
 }
 
 func (c *ICompleter) findExecutables() []string {

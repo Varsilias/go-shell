@@ -77,20 +77,5 @@ func main() {
 		cmd := NewCommand(prompt)
 		cmd.Execute()
 	}
-	// for {
-	// 	reader := bufio.NewReader(os.Stdin)
-	// 	fmt.Print("$ ")
-
-	// 	str, err := reader.ReadString('\n')
-	// 	if err != nil {
-	// 		log.Fatalf("error parsing prompt: %v", err)
-	// 	}
-	// 	// the new line character at the end indicate execution &
-	// 	// should be removed from the prompt entire
-	// 	prompt := strings.TrimRight(str, "\n")
-
-	// 	cmd := NewCommand(prompt)
-	// 	cmd.Execute()
-	// }
 
 }
