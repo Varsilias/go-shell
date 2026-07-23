@@ -15,14 +15,6 @@ import (
 	"github.com/codecrafters-io/shell-starter-go/app/parser"
 )
 
-var builtins = map[string]bool{
-	"echo":    true,
-	"type":    true,
-	"exit":    true,
-	"pwd":     true,
-	"cd":      true,
-	"history": true,
-}
 var StopWalk = errors.New("command found, stopping walk")
 
 type Command struct {
@@ -67,22 +59,12 @@ func (c *Command) Execute() {
 		return
 	}
 
-	switch cmd {
-	case "exit":
-		os.Exit(0)
-	case "echo":
-		c.Echo(args)
-	case "type":
-		c.Type(args[0])
-	case "pwd":
-		c.Pwd()
-	case "cd":
-		c.ChangeDir(args)
-	case "history":
-		c.History(args)
-	default:
-		c.CustomCommand(cmd, args)
+	if fn, ok := builtinTable[cmd]; ok {
+		fn(c, args)
+		return
 	}
+
+	c.CustomCommand(cmd, args)
 
 }
 
@@ -290,7 +272,7 @@ func (c *Command) Echo(args []string) {
 }
 
 func (c *Command) Type(cmd string) {
-	if builtins[cmd] {
+	if _, ok := builtinTable[cmd]; ok {
 		fmt.Fprintf(c.stdout, "%s is a shell builtin\n", cmd)
 		return
 	}

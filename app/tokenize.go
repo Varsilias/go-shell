@@ -11,10 +11,11 @@ func Tokenize(tokenStream []string) (*CommandV2, error) {
 		return nil, fmt.Errorf("syntax error: unexpected end of file after operator %s", tokenStream[0])
 	}
 
-	current := &CommandV2{
+	head := &CommandV2{
 		Args: []string{},
 		// Redirect: &RedirectConfig{},
 	}
+	current := head
 
 	i := 0
 	for i < len(tokenStream) {
@@ -24,11 +25,10 @@ func Tokenize(tokenStream []string) (*CommandV2, error) {
 		// at the time of implementation, the only Operator Codecrafters tests for is "|"
 		if op == OperatorPipe || op == OperatorSequentialExecution ||
 			op == OperatorLogicalAnd || op == OperatorLogicalOr || op == OperatorBackgroundExecution {
-			current.NextOp = op
 			if i+1 < len(tokenStream) {
+				current.NextOp = op
 				current.NextCmd = &CommandV2{
-					Args:     []string{},
-					Redirect: &RedirectConfig{},
+					Args: []string{},
 				}
 
 				current = current.NextCmd
@@ -62,11 +62,11 @@ func Tokenize(tokenStream []string) (*CommandV2, error) {
 		i++
 	}
 
-	if len(current.Args) == 0 && current.Redirect == nil {
+	if len(head.Args) == 0 && head.Redirect == nil {
 		return nil, fmt.Errorf("syntax error: empty command stream")
 	}
 
-	return current, nil
+	return head, nil
 }
 
 type Operator string

@@ -251,32 +251,52 @@ func TestTokenizePipesAndChaining(t *testing.T) {
 			name:   "a two-stage pipe currently drops the left-hand command: Tokenize returns `current`, which has been reassigned to walk forward to the last segment, so the head node (and its Args) is unreachable from the returned value",
 			tokens: []string{"ls", "|", "wc", "-l"},
 			want: &CommandV2{
-				Args:     []string{"wc", "-l"},
-				Redirect: &RedirectConfig{},
+				Args:     []string{"ls"},
+				Redirect: nil,
+				NextCmd: &CommandV2{
+					Args: []string{"wc", "-l"},
+				},
+				NextOp: OperatorPipe,
 			},
 		},
 		{
 			name:   "a three-stage pipe loses both earlier segments, not just one — only the final stage survives in the returned struct",
 			tokens: []string{"a", "|", "b", "|", "c"},
 			want: &CommandV2{
-				Args:     []string{"c"},
-				Redirect: &RedirectConfig{},
+				Args:     []string{"a"},
+				Redirect: nil,
+				NextCmd: &CommandV2{
+					Args: []string{"b"},
+					NextCmd: &CommandV2{
+						Args: []string{"c"},
+					},
+					NextOp: OperatorPipe,
+				},
+				NextOp: OperatorPipe,
 			},
 		},
 		{
 			name:   "`;` sequential chaining hits the same node-loss issue as `|`, since both share the branch that reassigns `current`",
 			tokens: []string{"echo", "hi", ";", "echo", "bye"},
 			want: &CommandV2{
-				Args:     []string{"echo", "bye"},
-				Redirect: &RedirectConfig{},
+				Args:     []string{"echo", "hi"},
+				Redirect: nil,
+				NextCmd: &CommandV2{
+					Args: []string{"echo", "bye"},
+				},
+				NextOp: OperatorSequentialExecution,
 			},
 		},
 		{
 			name:   "NextOp is never populated for any chaining operator, so `&&` is currently indistinguishable from `|` or `;` on the returned node",
 			tokens: []string{"a", "&&", "b"},
 			want: &CommandV2{
-				Args:     []string{"b"},
-				Redirect: &RedirectConfig{},
+				Args:     []string{"a"},
+				Redirect: nil,
+				NextCmd: &CommandV2{
+					Args: []string{"b"},
+				},
+				NextOp: OperatorLogicalAnd,
 			},
 		},
 		{
@@ -291,7 +311,6 @@ func TestTokenizePipesAndChaining(t *testing.T) {
 			res, err := Tokenize(tt.tokens)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, res)
-			assert.Equal(t, Operator(""), res.NextOp)
 		})
 	}
 }
