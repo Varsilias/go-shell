@@ -17,6 +17,21 @@ import (
 
 var StopWalk = errors.New("command found, stopping walk")
 
+type builtinFunc func(c *Command, args []string) int
+
+var builtinTable map[string]builtinFunc
+
+func init() {
+	builtinTable = map[string]builtinFunc{
+		"pwd":     func(c *Command, args []string) int { c.Pwd(); return 0 },
+		"cd":      func(c *Command, args []string) int { c.ChangeDir(args); return 0 },
+		"echo":    func(c *Command, args []string) int { c.Echo(args); return 0 },
+		"type":    func(c *Command, args []string) int { c.Type(args[0]); return 0 },
+		"exit":    func(c *Command, args []string) int { os.Exit(0); return 0 },
+		"history": func(c *Command, args []string) int { c.History(args); return 0 },
+	}
+}
+
 type Command struct {
 	stdin             io.Reader
 	stdout            io.Writer
@@ -101,36 +116,6 @@ func (c *Command) handlePipeline(pipeIndex int) {
 	cmdRight.Execute()
 
 	pr.Close()
-
-	// run LHS command as subprocess
-	// cmd1Path := c.findExecutable(leftCmd[0])
-	// cmd1 := exec.Command(cmd1Path, leftCmd[1:]...)
-	// cmd1.Stdin = os.Stdin
-	// cmd1.Stdout = pw
-	// cmd1.Stderr = os.Stderr
-
-	// run RHS command as second subprocess
-	// cmd2Path := c.findExecutable(rightCmd[0])
-	// cmd2 := exec.Command(cmd2Path, rightCmd[1:]...)
-	// cmd2.Stdin = pr
-	// cmd2.Stdout = os.Stdout
-	// cmd2.Stderr = os.Stderr
-
-	// if err := cmd1.Start(); err != nil {
-	// 	fmt.Fprintln(os.Stderr, err)
-	// 	return
-	// }
-
-	// if err := cmd2.Start(); err != nil {
-	// 	fmt.Fprintln(os.Stderr, err)
-	// 	return
-	// }
-
-	// pw.Close()
-	// pr.Close()
-
-	// cmd1.Wait()
-	// cmd2.Wait()
 
 }
 

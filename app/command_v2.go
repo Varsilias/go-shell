@@ -1,6 +1,11 @@
 package main
 
-import "os"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/codecrafters-io/shell-starter-go/app/parser"
+)
 
 type CommandV2 struct {
 	Args     []string
@@ -9,17 +14,41 @@ type CommandV2 struct {
 	NextOp   Operator
 }
 
-type builtinFunc func(c *Command, args []string) int
+type ExecContext struct {
+	Args    []string
+	Streams Streams
+}
 
-var builtinTable map[string]builtinFunc
+type builtinFuncV2 func(ctx *ExecContext) int
+
+var builtinTableV2 map[string]builtinFuncV2
 
 func init() {
-	builtinTable = map[string]builtinFunc{
-		"pwd":     func(c *Command, args []string) int { c.Pwd(); return 0 },
-		"cd":      func(c *Command, args []string) int { c.ChangeDir(args); return 0 },
-		"echo":    func(c *Command, args []string) int { c.Echo(args); return 0 },
-		"type":    func(c *Command, args []string) int { c.Type(args[0]); return 0 },
-		"exit":    func(c *Command, args []string) int { os.Exit(0); return 0 },
-		"history": func(c *Command, args []string) int { c.History(args); return 0 },
+	builtinTableV2 = map[string]builtinFuncV2{
+		"pwd": func(ctx *ExecContext) int { return 0 },
+		"cd":  func(ctx *ExecContext) int { return 0 },
+		"echo": func(ctx *ExecContext) int {
+			fmt.Fprintln(ctx.Streams.Stdout, strings.Join(ctx.Args[1:], " "))
+			return 0
+		},
+		"type":    func(ctx *ExecContext) int { return 0 },
+		"exit":    func(ctx *ExecContext) int { return 0 },
+		"history": func(ctx *ExecContext) int { return 0 },
 	}
+}
+
+func NewCommandV2(prompt string) (*CommandV2, error) {
+	parsed := parser.CleanPrompt(prompt)
+	cmd, err := Tokenize(parsed)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return cmd, nil
+}
+
+func (cmd *CommandV2) Execute() {
+	dispatcher := NewDispatcher()
+	dispatcher.Execute(cmd)
 }

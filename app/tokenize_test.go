@@ -56,9 +56,10 @@ func TestTokenize(t *testing.T) {
 // own job: turning a flat token stream into a CommandV2 (and its NextCmd
 // chain), independent of how those tokens were produced.
 //
-// These are characterization tests: they assert what Tokenize currently
-// does, including a few surprising behaviors, not what it "should" do.
-// Anywhere that matters, the test name says so explicitly.
+// These tests feed Tokenize raw token slices directly instead of going
+// through parser.CleanPrompt. They describe the CommandV2 structure and
+// syntax errors Tokenize is expected to produce from an already-split token
+// stream.
 
 func TestTokenizeEmptyAndSyntaxErrors(t *testing.T) {
 	testCases := []struct {
@@ -154,7 +155,7 @@ func TestTokenizeRedirection(t *testing.T) {
 			},
 		},
 		{
-			name:   "bare > currently resolves to RedirectNone instead of RedirectTruncate: Int() (redirect.go) has an empty `case \">\":` body with no fallthrough, so it falls through to the default return at the bottom",
+			name:   "bare > sets a truncate stdout redirect",
 			tokens: []string{"echo", "hi", ">", "out.txt"},
 			want: &CommandV2{
 				Args:     []string{"echo", "hi"},
@@ -170,7 +171,7 @@ func TestTokenizeRedirection(t *testing.T) {
 			},
 		},
 		{
-			name:   "bare >> is not recognized as a redirect operator at all: OperatorRAppend (tokenize.go) is defined as \" >>\" with a stray leading space, so `Operator(\">>\") == OperatorRAppend` never matches and the tokens fall through to being treated as plain args",
+			name:   "bare >> sets an append stdout redirect",
 			tokens: []string{"echo", "hi", ">>", "out.txt"},
 			want: &CommandV2{
 				Args:     []string{"echo", "hi"},
@@ -248,7 +249,7 @@ func TestTokenizePipesAndChaining(t *testing.T) {
 		want   *CommandV2
 	}{
 		{
-			name:   "a two-stage pipe currently drops the left-hand command: Tokenize returns `current`, which has been reassigned to walk forward to the last segment, so the head node (and its Args) is unreachable from the returned value",
+			name:   "a two-stage pipe links the left command to the right command",
 			tokens: []string{"ls", "|", "wc", "-l"},
 			want: &CommandV2{
 				Args:     []string{"ls"},
@@ -260,7 +261,7 @@ func TestTokenizePipesAndChaining(t *testing.T) {
 			},
 		},
 		{
-			name:   "a three-stage pipe loses both earlier segments, not just one — only the final stage survives in the returned struct",
+			name:   "a three-stage pipe builds a linked command chain",
 			tokens: []string{"a", "|", "b", "|", "c"},
 			want: &CommandV2{
 				Args:     []string{"a"},
@@ -276,7 +277,7 @@ func TestTokenizePipesAndChaining(t *testing.T) {
 			},
 		},
 		{
-			name:   "`;` sequential chaining hits the same node-loss issue as `|`, since both share the branch that reassigns `current`",
+			name:   "`;` sequential chaining links the following command",
 			tokens: []string{"echo", "hi", ";", "echo", "bye"},
 			want: &CommandV2{
 				Args:     []string{"echo", "hi"},
@@ -288,7 +289,7 @@ func TestTokenizePipesAndChaining(t *testing.T) {
 			},
 		},
 		{
-			name:   "NextOp is never populated for any chaining operator, so `&&` is currently indistinguishable from `|` or `;` on the returned node",
+			name:   "`&&` records a logical-AND operator between commands",
 			tokens: []string{"a", "&&", "b"},
 			want: &CommandV2{
 				Args:     []string{"a"},
@@ -316,11 +317,9 @@ func TestTokenizePipesAndChaining(t *testing.T) {
 }
 
 func TestTokenizeUnimplementedRedirectOperators(t *testing.T) {
-	// << (heredoc), <<< (herestring) and &> (combined stdout+stderr) are
-	// recognized as redirection tokens by Tokenize's operator check, but
-	// Int() (redirect.go) has no case for any of them, so they all resolve
-	// to the same RedirectType as "no redirect at all" — currently
-	// indistinguishable from each other or from a no-op.
+	// << (heredoc), <<< (herestring), and &> (combined stdout+stderr) are
+	// recognized as redirection tokens by Tokenize, but RedirectType support
+	// for them has not been implemented yet.
 	testCases := []struct {
 		name   string
 		tokens []string
