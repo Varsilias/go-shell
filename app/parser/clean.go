@@ -6,7 +6,7 @@ import (
 )
 
 // CleanPrompt takes an input string(the user's prompt) and creates
-// a list of tokens(executable inclusice)
+// a list of tokens(executable inclusive)
 // this function took the most of my mental energy
 // gave up multiple times but came back multiple times too.
 // It also led me to understand how compilers and interpreters work
@@ -17,7 +17,7 @@ func CleanPrompt(prompt string) []string {
 	var fragments []string      // we will push each token(separate identifiers) into this list
 	var builder strings.Builder // this is used to construct each individual token
 
-	// flags to know where we are and what we to consider
+	// flags to know where we are and what we need to consider
 	isSingleQuote := false
 	isDoubleQuote := false
 	isSlash := false

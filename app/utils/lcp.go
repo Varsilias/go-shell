@@ -13,7 +13,7 @@ func LongestCommonPrefix(words []string) string {
 		return b.String()
 	}
 
-	fw := words[0]
+	fw := words[0] // take the first word
 
 	for i := range len(fw) {
 		for _, word := range words {
