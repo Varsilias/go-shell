@@ -17,6 +17,7 @@ type Streams struct {
 
 type Dispatcher struct {
 	streams Streams
+	env     ExecEnv
 }
 
 func NewDispatcher() *Dispatcher {
@@ -25,6 +26,9 @@ func NewDispatcher() *Dispatcher {
 			Stdin:  os.Stdin,
 			Stdout: os.Stdout,
 			Stderr: os.Stderr,
+		},
+		env: ExecEnv{
+			Getwd: os.Getwd,
 		},
 	}
 }
@@ -119,7 +123,7 @@ func (d *Dispatcher) ExecuteOne(cmd *CommandV2, streams Streams) int {
 	}
 
 	if fn, ok := builtinTableV2[cmd.Args[0]]; ok {
-		return fn(&ExecContext{Args: cmd.Args, Streams: streams})
+		return fn(&ExecContext{Args: cmd.Args, Streams: streams, Env: d.env})
 	}
 
 	path := utils.LookupExecPath(cmd.Args[0])
