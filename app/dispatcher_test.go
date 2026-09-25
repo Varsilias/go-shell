@@ -370,67 +370,6 @@ func TestExecuteOne(t *testing.T) {
 		}(),
 	}
 
-	// testCases := []struct {
-	// 	name      string
-	// 	input     Input
-	// 	want      int
-	// 	postCheck func(input Input)
-	// }{
-	// 		func() struct {
-	//           name      string
-	//           input     Input
-	//           want      int
-	//           postCheck func(t *testing.T)
-	//       } {
-	//           var stdout bytes.Buffer
-
-	//           return struct {
-	//               name      string
-	//               input     Input
-	//               want      int
-	//               postCheck func(t *testing.T)
-	//           }{
-	//               name: "echo writes to provided stdout",
-	//               input: Input{
-	//                   cmd: &CommandV2{Args: []string{"echo", "hello"}},
-	//                   streams: Streams{
-	//                       Stdin:  strings.NewReader(""),
-	//                       Stdout: &stdout,
-	//                       Stderr: io.Discard,
-	//                   },
-	//               },
-	//               want: 0,
-	//               postCheck: func(t *testing.T) {
-	//                   assert.Equal(t, "hello\n", stdout.String())
-	//               },
-	//           }
-	//       }()
-	// 	{
-	// 		name:  "One node parsed input executes and sends output to standard output",
-	// 		input: Input{cmd: &CommandV2{Args: []string{"ls"}}, streams: defaultStreams},
-	// 		want:  0,
-	// 		postCheck: func(t *testing.T) {
-	// 			assert.GreaterOrEqual(t, input.streams.Stdout.String(), 1)
-	// 		},
-	// 	},
-	// 	{
-	// 		name:  "echo hello and sends output to provided stdout",
-	// 		input: Input{cmd: &CommandV2{Args: []string{"echo", "hello"}}, streams: Streams{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: io.Discard}},
-	// 		want:  0,
-	// 	},
-	// 	{
-	// 		name: "command with '>' token executes and redirect left output to specified file path",
-	// 		input: Input{streams: Streams{Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: io.Discard}, cmd: &CommandV2{
-	// 			Args: []string{"ls", "."},
-	// 			Redirect: &RedirectConfig{
-	// 				Type:     Int(">"),
-	// 				FilePath: "files.txt",
-	// 			},
-	// 		}},
-	// 		want: 0,
-	// 	},
-	// }
-
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			code := dispatcher.ExecuteOne(tt.input.cmd, tt.input.streams)
@@ -438,6 +377,232 @@ func TestExecuteOne(t *testing.T) {
 
 			if tt.postCheck != nil {
 				tt.postCheck(t)
+			}
+		})
+	}
+}
+
+func TestCollectPipeline(t *testing.T) {
+	dispatcher := NewDispatcher()
+
+	type testCase struct {
+		name        string
+		input       *CommandV2
+		wantLen     int
+		wantNextNil bool
+	}
+
+	testCases := []testCase{
+		{
+			name: "2 chain pipe commands returns 2 slices and a nil pointer",
+			input: &CommandV2{
+				Args:   []string{"echo", "hello"},
+				NextOp: OperatorPipe,
+				NextCmd: &CommandV2{
+					Args: []string{"wc", "-c"},
+				},
+			},
+			wantLen:     2,
+			wantNextNil: true,
+		},
+		{
+			name: "3 chain pipe commands return 3 slices and a nil pointer",
+			input: &CommandV2{
+				Args:   []string{"printf", "a\nb\nc\n"},
+				NextOp: OperatorPipe,
+				NextCmd: &CommandV2{
+					Args:   []string{"grep", "b"},
+					NextOp: OperatorPipe,
+					NextCmd: &CommandV2{
+						Args: []string{"wc", "-l"},
+					},
+				},
+			},
+			wantLen:     3,
+			wantNextNil: true,
+		},
+		{
+			name: "2 chain pipe command and a non pipe command return 2 slices and a non nil command",
+			input: &CommandV2{
+				Args:   []string{"echo", "hello"},
+				NextOp: OperatorPipe,
+				NextCmd: &CommandV2{
+					Args:   []string{"wc", "-c"},
+					NextOp: OperatorSequentialExecution,
+					NextCmd: &CommandV2{
+						Args: []string{"echo", "after"},
+					},
+				},
+			},
+			wantLen:     2,
+			wantNextNil: false,
+		},
+		{
+			name: "3 chain pipe command and a non-pipe command return 3 slices and a non nil command",
+			input: &CommandV2{
+				Args:   []string{"printf", "a\nb\nc\n"},
+				NextOp: OperatorPipe,
+				NextCmd: &CommandV2{
+					Args:   []string{"grep", "b"},
+					NextOp: OperatorPipe,
+					NextCmd: &CommandV2{
+						Args:   []string{"wc", "-l"},
+						NextOp: OperatorSequentialExecution,
+						NextCmd: &CommandV2{
+							Args: []string{"echo", "after"},
+						},
+					},
+				},
+			},
+			wantLen:     3,
+			wantNextNil: false,
+		},
+		{
+			name:        "nil head start return empty slice and nil next command",
+			input:       nil,
+			wantLen:     0,
+			wantNextNil: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, next := dispatcher.collectPipeline(tc.input)
+			assert.Len(t, got, tc.wantLen)
+			assert.Equal(t, tc.wantNextNil, next == nil)
+		})
+	}
+}
+
+func TestExecutePipeline(t *testing.T) {
+	dispatcher := NewDispatcher()
+	type testCase struct {
+		name      string
+		input     []*CommandV2
+		want      int
+		postCheck func(t *testing.T)
+	}
+
+	testCases := []testCase{
+		func() testCase {
+			path := filepath.Join(t.TempDir(), "two.txt")
+			_, err := os.Create(path)
+
+			return testCase{
+				name: "Two-stage simple pipeline",
+				input: []*CommandV2{
+					{
+						Args: []string{"echo", "hello"},
+					},
+					{
+						Args: []string{"wc", "-c"},
+						Redirect: &RedirectConfig{
+							Type:     RedirectTruncate,
+							FilePath: path,
+						},
+					},
+				},
+				want: 0,
+				postCheck: func(t *testing.T) {
+					assert.NoError(t, err)
+					content, err := os.ReadFile(path)
+					assert.NoError(t, err)
+					assert.Contains(t, string(content), "6")
+				},
+			}
+		}(),
+		func() testCase {
+			path := filepath.Join(t.TempDir(), "three.txt")
+			_, err := os.Create(path)
+			return testCase{
+				name: "Three-stage simple pipeline",
+				input: []*CommandV2{
+					{
+						Args: []string{"printf", "a\nb\nc\n"},
+					},
+					{
+						Args: []string{"grep", "b"},
+					},
+					{
+						Args: []string{"wc", "-l"},
+						Redirect: &RedirectConfig{
+							Type:     RedirectTruncate,
+							FilePath: path,
+						},
+					},
+				},
+				want: 0,
+				postCheck: func(t *testing.T) {
+					assert.NoError(t, err)
+					content, err := os.ReadFile(path)
+					assert.NoError(t, err)
+					assert.Contains(t, string(content), "1")
+				},
+			}
+		}(),
+		func() testCase {
+			path := filepath.Join(t.TempDir(), "early.txt")
+			_, err := os.Create(path)
+			return testCase{
+				name: "Early-closing consumer",
+				input: []*CommandV2{
+					{
+						Args: []string{"yes"},
+					},
+					{
+						Args: []string{"head", "-n", "1"},
+						Redirect: &RedirectConfig{
+							Type:     RedirectTruncate,
+							FilePath: path,
+						},
+					},
+				},
+				want: 0,
+				postCheck: func(t *testing.T) {
+					assert.NoError(t, err)
+					content, err := os.ReadFile(path)
+					assert.NoError(t, err)
+					assert.Contains(t, string(content), "y")
+				},
+			}
+		}(),
+		func() testCase {
+			path := filepath.Join(t.TempDir(), "early.txt")
+			_, err := os.Create(path)
+			return testCase{
+				name: "failing middle command inside pipeline",
+				input: []*CommandV2{
+					{
+						Args: []string{"printf", "a\nb\n"},
+					},
+					{
+						Args: []string{"grep", "z"},
+					},
+					{
+						Args: []string{"wc", "-l"},
+						Redirect: &RedirectConfig{
+							Type:     RedirectTruncate,
+							FilePath: path,
+						},
+					},
+				},
+				want: 0,
+				postCheck: func(t *testing.T) {
+					assert.NoError(t, err)
+					content, err := os.ReadFile(path)
+					assert.NoError(t, err)
+					assert.Contains(t, string(content), "0")
+				},
+			}
+		}(),
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := dispatcher.ExecutePipeline(tc.input)
+			assert.Equal(t, got, tc.want)
+			if tc.postCheck != nil {
+				tc.postCheck(t)
 			}
 		})
 	}

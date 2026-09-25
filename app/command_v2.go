@@ -31,9 +31,9 @@ func NewCommandV2(prompt string) (*CommandV2, error) {
 	return cmd, nil
 }
 
-func (cmd *CommandV2) Execute() {
+func (cmd *CommandV2) Execute() int {
 	dispatcher := NewDispatcher()
-	dispatcher.Execute(cmd)
+	return dispatcher.Execute(cmd)
 }
 
 type ExecEnv struct {

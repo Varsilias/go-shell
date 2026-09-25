@@ -23,7 +23,7 @@ type ICompleter struct {
 
 func NewCompleter() *ICompleter {
 	instance := &ICompleter{
-		builtinCmds: slices.Collect(maps.Keys(builtinTable)),
+		builtinCmds: slices.Collect(maps.Keys(builtinTableV2)),
 	}
 	completerConfig := []readline.PrefixCompleterInterface{}
 	cmds := instance.getUniqueCmds()
